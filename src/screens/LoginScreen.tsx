@@ -11,7 +11,7 @@ import {
   Platform,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { AuthGuardService, MASTER_ADMIN, AuthSession } from '../auth/authGuard';
+import { AuthGuardService, AuthSession } from '../auth/authGuard';
 
 interface LoginScreenProps {
   onLoginSuccess: (session: AuthSession) => void;
@@ -48,12 +48,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const fillTestCredentials = () => {
-    setEmail(MASTER_ADMIN.email);
-    setPassword(MASTER_ADMIN.password);
-    setErrorMessage(null);
   };
 
   return (
@@ -137,24 +131,12 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                 <Text style={styles.loginBtnText}>Entrar no BeatSync</Text>
               )}
             </TouchableOpacity>
-
-            {/* Quick Fill Helper for Demo / Test Credential */}
-            <TouchableOpacity
-              activeOpacity={0.7}
-              onPress={fillTestCredentials}
-              style={styles.quickFillBtn}
-            >
-              <Text style={styles.quickFillText}>⚡ Preencher Credenciais de Teste</Text>
-            </TouchableOpacity>
           </View>
 
           {/* Footer note */}
           <View style={styles.footer}>
             <Text style={styles.footerNote}>
               Ambiente protegido para ensaios e palcos • Visual OLED Zero Luz
-            </Text>
-            <Text style={styles.credHint}>
-              Admin autorizado: <Text style={styles.credCode}>teste@beatsync.com</Text>
             </Text>
           </View>
         </View>
@@ -302,16 +284,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     letterSpacing: 0.5,
   },
-  quickFillBtn: {
-    marginTop: 14,
-    alignItems: 'center',
-    paddingVertical: 8,
-  },
-  quickFillText: {
-    color: '#777777',
-    fontSize: 11,
-    fontWeight: '600',
-  },
   footer: {
     marginTop: 28,
     alignItems: 'center',
@@ -320,14 +292,5 @@ const styles = StyleSheet.create({
     color: '#444444',
     fontSize: 11,
     textAlign: 'center',
-  },
-  credHint: {
-    color: '#555555',
-    fontSize: 11,
-    marginTop: 6,
-  },
-  credCode: {
-    color: '#00E5FF',
-    fontWeight: '700',
   },
 });

@@ -8,6 +8,7 @@ import {
   StatusBar as RNStatusBar,
   Platform,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 import { Song, Playlist } from './src/types';
@@ -68,6 +69,23 @@ function AppContent() {
     await AuthGuardService.logout();
     setAuthSession(null);
     setActiveTab('metronome');
+  };
+
+  const confirmLogout = () => {
+    if (Platform.OS === 'web') {
+      if (window.confirm('Deseja realmente sair do BeatSync?')) {
+        handleLogout();
+      }
+    } else {
+      Alert.alert(
+        'Sair da Conta',
+        'Deseja realmente encerrar a sessão no BeatSync?',
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          { text: 'Sair', style: 'destructive', onPress: handleLogout },
+        ]
+      );
+    }
   };
 
   // CRUD SONG HANDLERS
@@ -164,6 +182,43 @@ function AppContent() {
       ]}
     >
       <ExpoStatusBar style="light" />
+
+      {/* Fixed Top Bar with Logout Button across all tabs */}
+      <View
+        style={[
+          styles.topHeader,
+          {
+            backgroundColor: currentTheme.navBackground,
+            borderBottomColor: currentTheme.border,
+          },
+        ]}
+      >
+        <View style={styles.topHeaderLeft}>
+          <Text style={[styles.topHeaderLogo, { color: currentTheme.accent }]}>BEATSYNC</Text>
+          {isAdmin && (
+            <View style={[styles.topAdminBadge, { borderColor: currentTheme.accent }]}>
+              <Text style={[styles.topAdminBadgeText, { color: currentTheme.accent }]}>ADMIN</Text>
+            </View>
+          )}
+        </View>
+
+        <TouchableOpacity
+          activeOpacity={0.7}
+          onPress={confirmLogout}
+          style={[
+            styles.fixedLogoutBtn,
+            {
+              borderColor: currentTheme.border,
+              backgroundColor: currentTheme.card,
+            },
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel="Sair do aplicativo"
+        >
+          <Text style={[styles.fixedLogoutIcon, { color: currentTheme.textSecondary }]}>⎋</Text>
+          <Text style={[styles.fixedLogoutText, { color: currentTheme.textSecondary }]}>Sair</Text>
+        </TouchableOpacity>
+      </View>
 
       {/* Main Screen Container */}
       <View style={[styles.screenContainer, { backgroundColor: currentTheme.background }]}>
@@ -424,6 +479,53 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     paddingTop: Platform.OS === 'android' ? RNStatusBar.currentHeight : 0,
+  },
+  topHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderBottomWidth: 1,
+  },
+  topHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  topHeaderLogo: {
+    fontSize: 13,
+    fontWeight: '900',
+    letterSpacing: 2,
+  },
+  topAdminBadge: {
+    borderWidth: 1,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 4,
+  },
+  topAdminBadgeText: {
+    fontSize: 8,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
+  fixedLogoutBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 5,
+    paddingHorizontal: 9,
+    borderRadius: 6,
+    borderWidth: 1,
+    gap: 5,
+  },
+  fixedLogoutIcon: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  fixedLogoutText: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
   screenContainer: {
     flex: 1,
