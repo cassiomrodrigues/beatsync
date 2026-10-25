@@ -1,118 +1,84 @@
-# 🎵 BeatSync (iOS & Android)
+# 🎵 BeatSync — Metrônomo Profissional PWA & Mobile
 
-Aplicativo profissional de metrônomo com biblioteca de músicas e gerenciador de repertórios/playlists (setlists), desenvolvido com **React Native + Expo + TypeScript**.
+Aplicativo profissional de metrônomo progressivo em formato **PWA (Progressive Web App)** e Mobile, desenvolvido especificamente para músicos e uso em tempo real (palco, ensaios e igrejas).
 
-Compatível com **iOS**, **Android** e **Web Preview**.
+Construído com **React Native + Expo Web + TypeScript + Web Audio API**, persistência relacional com **Supabase** e hospedagem global ultrarrápida no **Cloudflare Pages**.
 
 ---
 
-## 🚀 Como Executar o Aplicativo
+## 🌐 Acesso Online & Deploy
 
-### 1. Testar Imediatamente no Computador (Web Preview)
-O servidor local já está ativo! Você pode abrir no navegador:
-👉 **[http://localhost:3000](http://localhost:3000)**
+- **URL de Produção Cloudflare Pages:** 👉 **[https://beatsync-75q.pages.dev](https://beatsync-75q.pages.dev)**
+- **Backend & Auth:** Supabase PostgreSQL com Row Level Security (RLS)
+- **Modo PWA:** Instalável diretamente no iPhone (Safari -> Adicionar à Tela de Início) e Android (Chrome -> Instalar Aplicativo).
 
-Para iniciar o servidor de preview manualmente a qualquer momento:
+---
+
+## 🚀 Como Executar Localmente
+
+### 1. Testar no Navegador (Web Preview)
 ```bash
 npm run preview
 ```
+Acesse: 👉 **[http://localhost:3000](http://localhost:3000)**
 
-### 2. Rodar no Celular (iPhone ou Android) com o Expo Go
-1. Instale o aplicativo gratuito **Expo Go** na [App Store (iOS)](https://apps.apple.com/app/expo-go/id982107779) ou na [Google Play Store (Android)](https://play.google.com/store/apps/details?id=host.exp.exponent).
-2. No terminal do projeto, execute:
-   ```bash
-   npm start
-   ```
-3. Um **QR Code** será exibido no terminal:
-   - **No Android:** abra o app Expo Go e toque em *Scan QR Code*.
-   - **No iPhone:** abra a câmera padrão do iPhone e aponte para o QR Code para abrir no Expo Go.
+### 2. Rodar no Celular via Expo Go
+```bash
+npm start
+```
+Escaneie o QR Code gerado no terminal usando o app **Expo Go** (Android) ou a Câmera (iOS).
 
----
-
-## 📱 Recursos Principais
-
-### ⏱️ 1. Metrônomo Parametrizável de Alta Precisão
-- **Controle de Andamento (BPM):** Faixa de 20 a 320 BPM com ajuste fino (+1/-1), ajuste rápido (+5/-5) e marcações de tempo italianas (*Largo, Andante, Moderato, Allegro, Presto*).
-- **Tap Tempo Inteligente:** Toque no ritmo da música para calcular o andamento automaticamente com média ponderada de batidas.
-- **Fórmulas de Compasso:**
-  - Presets comuns: **2/4, 3/4, 4/4, 5/4, 6/8, 7/8, 9/8, 12/8**.
-  - Construtor personalizado: escolha qualquer numerador (1 a 16) e denominador (2, 4, 8, 16).
-- **Subdivisões do Tempo:** Semínima (1/4), Colcheia (1/8), Tercina (3T) e Semicolcheia (1/16).
-- **Acentuação Dinâmica por Tempo:**
-  - Toque em qualquer círculo do compasso para alternar:
-    - ▲ **Acentuado / Forte** (destaque de pitch e amplitude)
-    - ● **Normal**
-    - ◦ **Suave / Ghost note**
-    - ✕ **Mudo** (silencia o tempo selecionado)
-- **Timbres Sintetizados em Alta Definição:**
-  - 🪵 **Madeira (Woodblock):** ressonância acústica orgânica.
-  - 🎚️ **Digital (Beep):** senoide pura de 880Hz / 440Hz com decaimento exponencial.
-  - 🥁 **Rimshot:** impacto percussivo com ruído filtrado e ataque de caixa.
-  - ⚙️ **Mecânico:** clique de escape de pêndulo analógico clássico.
-- **Visual & Performance:**
-  - Pêndulo analógico oscilante sincronizado com o andamento.
-  - Flash visual de tela no primeiro tempo (downbeat), ideal para palcos barulhentos.
-  - Cronômetro de ensaio/treino integrado.
+### 3. Gerar Build de Produção para Web/PWA
+```bash
+npm run build:web
+```
 
 ---
 
-### 🎸 2. Biblioteca de Músicas
-- **Cadastro Completo:**
-  - Nome da Música
-  - Nome do Artista / Banda
-  - Andamento em BPM
-  - Fórmula de Compasso
-  - Subdivisão recomendada
-  - Tom / Tonalidade (*ex: Am, C, G#m*)
-  - Duração estimada (*ex: 03:45*)
-  - Observações e notas de arranjo (*ex: "Entrada após 4 compassos de bateria"*)
-  - Timbre preferido do metrônomo para a música
-- **Ação com 1 Toque:** botão **"Tocar no Metrônomo"** ajusta todos os parâmetros instantaneamente e abre o metrônomo pronto para tocar.
-- **Busca e Filtros em Tempo Real:** pesquise por título, artista, tom ou compasso e ordene por recentes, ordem alfabética ou BPM.
-- **Adicionar à Playlist:** botão direto para vincular a música a qualquer setlist existente.
+## 🎨 Filosofia de Design & Temas Selecionáveis
+
+Desenvolvido para máxima discrição e legibilidade em ambientes com iluminação desafiadora:
+
+1. **OLED Zero Luz (Fundo #000000 Absoluto):**
+   - Economia extrema de bateria em telas AMOLED/OLED.
+   - Total discrição visual no altar ou palco escuro — zero reflexo ou brilho indesejado para o público.
+2. **OLED Âmbar (Igreja & Altar):**
+   - Preto absoluto combinado com tons âmbar quentes, proporcionando descanso visual total e serenidade em cultos noturnos.
+3. **Dark Studio:**
+   - Azul ardósia profundo com acentos ciano elétrico — layout clássico e moderno de estúdio.
+4. **Stage High-Vis (Amarelo Elétrico):**
+   - Preto puro com elementos em amarelo neon de alto contraste para visibilidade máxima sob refletores ou a longa distância.
 
 ---
 
-### 📑 3. Gerenciador de Playlists (Setlists)
-- Crie múltiplos repertórios (*ex: "Show no Bar de Sexta", "Ensaio Banda de Rock", "Estudo de Técnicas"*).
-- Organize a ordem exata de execução das músicas no show através dos botões **▲ Subir** e **▼ Descer**.
-- Adicione e remova músicas da biblioteca a qualquer momento.
+## 🔊 Motor de Áudio Web Audio API & Wake Lock
+
+- **Síntese Procedural sem Latência:** Os cliques do metrônomo são sintetizados matematicamente em tempo real via Web Audio API (*senoides, ruído filtrado e envoltórias de ganho exponencial*). Zero arquivos de áudio pesados, com lookahead scheduling de alta precisão imune a flutuações de timer.
+- **Tela Sempre Ativa (Screen Wake Lock):** Enquanto o metrônomo ou o player estiver em execução, o BeatSync aciona a **Screen Wake Lock API** (e `expo-keep-awake`), impedindo que o celular ou tablet bloqueie a tela durante a música.
 
 ---
 
-### 🎤 4. Modo Ao Vivo / Show (Live Stage Player)
-- Desenvolvido especialmente para o músico no palco (na estante de partitura ou fixador de celular).
-- **Tipografia Grande e Alto Contraste:** legível a distância mesmo sob iluminação de palco.
-- **Transição Rápida:** botões **PRÓXIMA ›** e **‹ ANTERIOR** mudam o andamento e o compasso do metrônomo no mesmo instante sem interromper o fluxo do show.
-- **Visualizador da Próxima Música:** mostra antecipadamente a próxima faixa, andamento e tom para a banda se preparar.
-- **Navegador Rápido (Jump Menu):** pule para qualquer música da setlist com 1 toque.
+## 🔐 Controle de Acesso & Supabase Cloud
+
+- **Autenticação:** Cadastro e login seguros com e-mail e senha gerenciados pelo Supabase Auth.
+- **Biblioteca Particular:** Músicas do usuário mantidas com proteção rigorosa através de Row Level Security (RLS).
+- **Biblioteca Global:** Opção de publicar músicas com 1 clique para a comunidade BeatSync. Outros músicos podem pesquisar e importar faixas diretamente para seus repertórios.
+- **Compartilhamento Direto:** Compartilhe qualquer música da sua biblioteca informando o e-mail de outro músico (com opção de liberar ou restringir permissão de edição).
 
 ---
 
-### 📦 5. Backup, Restauração e Compartilhamento (JSON)
-- Exporte toda a biblioteca de músicas e playlists em formato JSON para salvar no computador ou enviar para outros membros da banda.
-- Importe backups salvos para sincronizar aparelhos.
-- Restaurador de Repertório com clássicos pré-carregados (*Michael Jackson, Queen, Dave Brubeck, Pink Floyd, Tom Jobim, Metallica, Toto*).
+## 🗄️ Estrutura do Banco de Dados (Supabase)
+
+- `profiles`: Perfis de músicos vinculados a `auth.users`.
+- `songs`: Catálogo de faixas com BPM, fórmula de compasso, tonalidade, subdivisão, timbres, notas e flag `is_public`.
+- `song_shares`: Controle de compartilhamento por e-mail com permissão de edição (`can_edit`).
+- `playlists` & `playlist_songs`: Gestão relacional de setlists e repertórios de apresentações.
+- **Políticas RLS:** Cada usuário acessa somente suas faixas, músicas explicitamente compartilhadas com ele ou faixas públicas da comunidade.
 
 ---
 
-## 🛠️ Publicação nas Lojas (Google Play e Apple App Store)
+## 🚀 Integração Cloudflare Pages & CI/CD
 
-O projeto está pronto para compilar instaladores nativos (.apk/.aab para Android e .ipa para iOS) usando o **EAS (Expo Application Services)**:
-
-1. Instale o EAS CLI:
-   ```bash
-   npm install -g eas-cli
-   ```
-2. Inicialize a configuração de build:
-   ```bash
-   eas build:configure
-   ```
-3. Gerar build para Android (APK para testes ou AAB para Play Store):
-   ```bash
-   eas build -p android --profile preview
-   ```
-4. Gerar build para iOS:
-   ```bash
-   eas build -p ios
-   ```
+O projeto conta com fluxo automatizado via **GitHub Actions** (`.github/workflows/deploy-cloudflare.yml`):
+- Todo push para o branch `main` executa a exportação estática do Expo Web (`npm run build:web`).
+- O artefato gerado na pasta `dist/` é publicado automaticamente no projeto **Cloudflare Pages** `beatsync`.

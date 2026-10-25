@@ -22,6 +22,10 @@ export interface Song {
   duration?: string;           // e.g. "03:45"
   soundType?: SoundType;
   accentPattern?: BeatState[];
+  isPublic?: boolean;          // Public in Global Library
+  userId?: string;             // Owner user ID in Supabase
+  isShared?: boolean;          // If shared with current user
+  sharedBy?: string;           // Email or ID of sharer
   createdAt: number;
 }
 

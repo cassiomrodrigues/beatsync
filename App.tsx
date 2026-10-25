@@ -16,10 +16,12 @@ import { SongsScreen } from './src/screens/SongsScreen';
 import { PlaylistsScreen } from './src/screens/PlaylistsScreen';
 import { LiveSetlistScreen } from './src/screens/LiveSetlistScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
+import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
 
 type TabType = 'metronome' | 'songs' | 'playlists' | 'live' | 'settings';
 
-export default function App() {
+function AppContent() {
+  const { currentTheme } = useTheme();
   const [activeTab, setActiveTab] = useState<TabType>('metronome');
   const [songs, setSongs] = useState<Song[]>([]);
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
@@ -109,11 +111,16 @@ export default function App() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView
+      style={[
+        styles.safeArea,
+        { backgroundColor: currentTheme.background },
+      ]}
+    >
       <ExpoStatusBar style="light" />
 
       {/* Main Screen Container */}
-      <View style={styles.screenContainer}>
+      <View style={[styles.screenContainer, { backgroundColor: currentTheme.background }]}>
         {activeTab === 'metronome' && (
           <MetronomeScreen
             currentSong={currentSong}
@@ -163,16 +170,39 @@ export default function App() {
       </View>
 
       {/* Bottom Navigation Bar */}
-      <View style={styles.bottomNav}>
+      <View
+        style={[
+          styles.bottomNav,
+          {
+            backgroundColor: currentTheme.navBackground,
+            borderTopColor: currentTheme.border,
+          },
+        ]}
+      >
         <TouchableOpacity
           activeOpacity={0.8}
           onPress={() => setActiveTab('metronome')}
-          style={[styles.navTab, activeTab === 'metronome' && styles.navTabActive]}
+          style={[
+            styles.navTab,
+            activeTab === 'metronome' && [
+              styles.navTabActive,
+              { backgroundColor: currentTheme.navActive },
+            ],
+          ]}
         >
           <Text style={[styles.navIcon, activeTab === 'metronome' && styles.navIconActive]}>
             ⏱
           </Text>
-          <Text style={[styles.navText, activeTab === 'metronome' && styles.navTextActive]}>
+          <Text
+            style={[
+              styles.navText,
+              { color: currentTheme.textSecondary },
+              activeTab === 'metronome' && [
+                styles.navTextActive,
+                { color: currentTheme.accent },
+              ],
+            ]}
+          >
             Metrônomo
           </Text>
         </TouchableOpacity>
@@ -180,12 +210,27 @@ export default function App() {
         <TouchableOpacity
           activeOpacity={0.8}
           onPress={() => setActiveTab('songs')}
-          style={[styles.navTab, activeTab === 'songs' && styles.navTabActive]}
+          style={[
+            styles.navTab,
+            activeTab === 'songs' && [
+              styles.navTabActive,
+              { backgroundColor: currentTheme.navActive },
+            ],
+          ]}
         >
           <Text style={[styles.navIcon, activeTab === 'songs' && styles.navIconActive]}>
             🎵
           </Text>
-          <Text style={[styles.navText, activeTab === 'songs' && styles.navTextActive]}>
+          <Text
+            style={[
+              styles.navText,
+              { color: currentTheme.textSecondary },
+              activeTab === 'songs' && [
+                styles.navTextActive,
+                { color: currentTheme.accent },
+              ],
+            ]}
+          >
             Músicas
           </Text>
         </TouchableOpacity>
@@ -193,12 +238,27 @@ export default function App() {
         <TouchableOpacity
           activeOpacity={0.8}
           onPress={() => setActiveTab('playlists')}
-          style={[styles.navTab, activeTab === 'playlists' && styles.navTabActive]}
+          style={[
+            styles.navTab,
+            activeTab === 'playlists' && [
+              styles.navTabActive,
+              { backgroundColor: currentTheme.navActive },
+            ],
+          ]}
         >
           <Text style={[styles.navIcon, activeTab === 'playlists' && styles.navIconActive]}>
             📑
           </Text>
-          <Text style={[styles.navText, activeTab === 'playlists' && styles.navTextActive]}>
+          <Text
+            style={[
+              styles.navText,
+              { color: currentTheme.textSecondary },
+              activeTab === 'playlists' && [
+                styles.navTextActive,
+                { color: currentTheme.accent },
+              ],
+            ]}
+          >
             Playlists
           </Text>
         </TouchableOpacity>
@@ -206,12 +266,27 @@ export default function App() {
         <TouchableOpacity
           activeOpacity={0.8}
           onPress={() => setActiveTab('live')}
-          style={[styles.navTab, activeTab === 'live' && styles.navTabActive]}
+          style={[
+            styles.navTab,
+            activeTab === 'live' && [
+              styles.navTabActive,
+              { backgroundColor: currentTheme.navActive },
+            ],
+          ]}
         >
           <Text style={[styles.navIcon, activeTab === 'live' && styles.navIconActive]}>
             🎤
           </Text>
-          <Text style={[styles.navText, activeTab === 'live' && styles.navTextActive]}>
+          <Text
+            style={[
+              styles.navText,
+              { color: currentTheme.textSecondary },
+              activeTab === 'live' && [
+                styles.navTextActive,
+                { color: currentTheme.accent },
+              ],
+            ]}
+          >
             Ao Vivo
           </Text>
         </TouchableOpacity>
@@ -219,12 +294,27 @@ export default function App() {
         <TouchableOpacity
           activeOpacity={0.8}
           onPress={() => setActiveTab('settings')}
-          style={[styles.navTab, activeTab === 'settings' && styles.navTabActive]}
+          style={[
+            styles.navTab,
+            activeTab === 'settings' && [
+              styles.navTabActive,
+              { backgroundColor: currentTheme.navActive },
+            ],
+          ]}
         >
           <Text style={[styles.navIcon, activeTab === 'settings' && styles.navIconActive]}>
             ⚙️
           </Text>
-          <Text style={[styles.navText, activeTab === 'settings' && styles.navTextActive]}>
+          <Text
+            style={[
+              styles.navText,
+              { color: currentTheme.textSecondary },
+              activeTab === 'settings' && [
+                styles.navTextActive,
+                { color: currentTheme.accent },
+              ],
+            ]}
+          >
             Ajustes
           </Text>
         </TouchableOpacity>
@@ -233,10 +323,17 @@ export default function App() {
   );
 }
 
+export default function App() {
+  return (
+    <ThemeProvider>
+      <AppContent />
+    </ThemeProvider>
+  );
+}
+
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#0E1017',
     paddingTop: Platform.OS === 'android' ? RNStatusBar.currentHeight : 0,
   },
   screenContainer: {
@@ -244,9 +341,7 @@ const styles = StyleSheet.create({
   },
   bottomNav: {
     flexDirection: 'row',
-    backgroundColor: '#12141F',
     borderTopWidth: 1,
-    borderTopColor: '#222738',
     paddingVertical: 8,
     paddingHorizontal: 6,
     justifyContent: 'space-around',
@@ -259,9 +354,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     minWidth: 62,
   },
-  navTabActive: {
-    backgroundColor: '#1A2133',
-  },
+  navTabActive: {},
   navIcon: {
     fontSize: 20,
     marginBottom: 2,
@@ -271,12 +364,10 @@ const styles = StyleSheet.create({
     opacity: 1,
   },
   navText: {
-    color: '#7682A4',
     fontSize: 11,
     fontWeight: '600',
   },
   navTextActive: {
-    color: '#00E5FF',
     fontWeight: '800',
   },
 });

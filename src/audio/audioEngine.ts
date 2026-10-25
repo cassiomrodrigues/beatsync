@@ -1,6 +1,46 @@
 import { BeatState, SoundType } from '../types';
 import * as Haptics from 'expo-haptics';
+import * as KeepAwake from 'expo-keep-awake';
 import { Platform } from 'react-native';
+
+// Screen Wake Lock helper for browsers / PWA (keeps display awake on stage & rehearsal)
+let wakeLockSentinel: any = null;
+
+async function requestScreenWakeLock() {
+  try {
+    await KeepAwake.activateKeepAwakeAsync('beatsync-playback');
+  } catch {}
+
+  if (typeof navigator !== 'undefined' && 'wakeLock' in (navigator as any)) {
+    try {
+      wakeLockSentinel = await (navigator as any).wakeLock.request('screen');
+      wakeLockSentinel.addEventListener('release', () => {
+        wakeLockSentinel = null;
+      });
+    } catch {}
+  }
+}
+
+async function releaseScreenWakeLock() {
+  try {
+    KeepAwake.deactivateKeepAwake('beatsync-playback');
+  } catch {}
+
+  if (wakeLockSentinel) {
+    try {
+      await wakeLockSentinel.release();
+    } catch {}
+    wakeLockSentinel = null;
+  }
+}
+
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && audioEngine.getIsRunning()) {
+      requestScreenWakeLock();
+    }
+  });
+}
 
 class AudioEngine {
   private audioCtx: AudioContext | null = null;
@@ -74,6 +114,9 @@ class AudioEngine {
     this.currentBeatInMeasure = 0;
     this.currentSubdivisionIndex = 0;
 
+    // Keep screen awake while player is running (crucial for live stage and rehearsals)
+    requestScreenWakeLock();
+
     if (this.audioCtx) {
       this.nextNoteTime = this.audioCtx.currentTime + 0.05;
     } else {
@@ -92,6 +135,9 @@ class AudioEngine {
     }
     this.currentBeatInMeasure = 0;
     this.currentSubdivisionIndex = 0;
+
+    // Release screen wake lock when stopped
+    releaseScreenWakeLock();
   }
 
   public getIsRunning(): boolean {

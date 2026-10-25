@@ -37,6 +37,7 @@ export const SongModal: React.FC<SongModalProps> = ({
   const [notes, setNotes] = useState('');
   const [duration, setDuration] = useState('');
   const [soundType, setSoundType] = useState<SoundType>('woodblock');
+  const [isPublic, setIsPublic] = useState(false);
   const [errors, setErrors] = useState<{ title?: string; artist?: string }>({});
 
   useEffect(() => {
@@ -50,6 +51,7 @@ export const SongModal: React.FC<SongModalProps> = ({
       setNotes(songToEdit.notes || '');
       setDuration(songToEdit.duration || '');
       setSoundType(songToEdit.soundType || 'woodblock');
+      setIsPublic(Boolean(songToEdit.isPublic));
     } else {
       setTitle('');
       setArtist('');
@@ -60,6 +62,7 @@ export const SongModal: React.FC<SongModalProps> = ({
       setNotes('');
       setDuration('');
       setSoundType('woodblock');
+      setIsPublic(false);
     }
     setErrors({});
   }, [songToEdit, visible]);
@@ -89,6 +92,7 @@ export const SongModal: React.FC<SongModalProps> = ({
       notes: notes.trim() || undefined,
       duration: duration.trim() || undefined,
       soundType,
+      isPublic,
       createdAt: songToEdit ? songToEdit.createdAt : Date.now(),
     };
 
@@ -330,6 +334,39 @@ export const SongModal: React.FC<SongModalProps> = ({
               />
             </View>
 
+            {/* Visibilidade: Particular vs Biblioteca Global */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Visibilidade & Compartilhamento</Text>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={() => setIsPublic(!isPublic)}
+                style={[
+                  styles.visibilityCard,
+                  isPublic && styles.visibilityCardPublic,
+                ]}
+              >
+                <Text style={styles.visibilityIcon}>{isPublic ? '🌐' : '🔒'}</Text>
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Text style={[styles.visibilityTitle, isPublic && styles.visibilityTitlePublic]}>
+                    {isPublic ? 'Publicada na Biblioteca Global' : 'Música Particular (Apenas Eu)'}
+                  </Text>
+                  <Text style={styles.visibilityDesc}>
+                    {isPublic
+                      ? 'Visível para a comunidade BeatSync. Outros músicos podem pesquisar e importar.'
+                      : 'Privada na sua biblioteca. Você também pode compartilhá-la diretamente com usuários específicos.'}
+                  </Text>
+                </View>
+                <View
+                  style={[
+                    styles.toggleCircle,
+                    isPublic && styles.toggleCircleActive,
+                  ]}
+                >
+                  <Text style={styles.toggleCheck}>{isPublic ? '✓' : ''}</Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+
             {/* Save Button */}
             <TouchableOpacity
               activeOpacity={0.8}
@@ -532,6 +569,55 @@ const styles = StyleSheet.create({
   },
   soundOptionTextSelected: {
     color: '#00E5FF',
+  },
+  visibilityCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1E2235',
+    borderWidth: 1,
+    borderColor: '#2F3652',
+    borderRadius: 12,
+    padding: 12,
+  },
+  visibilityCardPublic: {
+    borderColor: '#00E5FF',
+    backgroundColor: '#0D2738',
+  },
+  visibilityIcon: {
+    fontSize: 24,
+  },
+  visibilityTitle: {
+    color: '#E0E6F8',
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  visibilityTitlePublic: {
+    color: '#00E5FF',
+  },
+  visibilityDesc: {
+    color: '#8A94B2',
+    fontSize: 11,
+    lineHeight: 15,
+  },
+  toggleCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#4A5578',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 8,
+  },
+  toggleCircleActive: {
+    borderColor: '#00E5FF',
+    backgroundColor: '#00E5FF',
+  },
+  toggleCheck: {
+    color: '#0E1017',
+    fontSize: 14,
+    fontWeight: '900',
   },
   saveBtn: {
     backgroundColor: '#00E5FF',
