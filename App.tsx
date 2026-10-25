@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   StatusBar as RNStatusBar,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 import { Song, Playlist } from './src/types';
@@ -16,18 +17,32 @@ import { SongsScreen } from './src/screens/SongsScreen';
 import { PlaylistsScreen } from './src/screens/PlaylistsScreen';
 import { LiveSetlistScreen } from './src/screens/LiveSetlistScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
+import { LoginScreen } from './src/screens/LoginScreen';
+import { AdminScreen } from './src/screens/AdminScreen';
+import { AuthGuardService, AuthSession } from './src/auth/authGuard';
 import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
 
-type TabType = 'metronome' | 'songs' | 'playlists' | 'live' | 'settings';
+type TabType = 'metronome' | 'songs' | 'playlists' | 'live' | 'settings' | 'admin';
 
 function AppContent() {
   const { currentTheme } = useTheme();
+  const [authSession, setAuthSession] = useState<AuthSession | null>(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
+
   const [activeTab, setActiveTab] = useState<TabType>('metronome');
   const [songs, setSongs] = useState<Song[]>([]);
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [currentSong, setCurrentSong] = useState<Song | null>(null);
   const [activeLivePlaylist, setActiveLivePlaylist] = useState<Playlist | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Check authentication session on mount
+  useEffect(() => {
+    AuthGuardService.getSession().then((session) => {
+      setAuthSession(session);
+      setIsAuthLoading(false);
+    });
+  }, []);
 
   // Load data on startup
   const loadData = async () => {
@@ -44,8 +59,16 @@ function AppContent() {
   };
 
   useEffect(() => {
-    loadData();
-  }, []);
+    if (authSession) {
+      loadData();
+    }
+  }, [authSession]);
+
+  const handleLogout = async () => {
+    await AuthGuardService.logout();
+    setAuthSession(null);
+    setActiveTab('metronome');
+  };
 
   // CRUD SONG HANDLERS
   const handleSaveSong = async (song: Song) => {
@@ -110,6 +133,29 @@ function AppContent() {
     setActiveTab('live');
   };
 
+  // 1. Initial Authentication Loading State
+  if (isAuthLoading) {
+    return (
+      <SafeAreaView style={[styles.safeArea, { backgroundColor: '#000000', justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color="#00E5FF" />
+      </SafeAreaView>
+    );
+  }
+
+  // 2. Unauthenticated Barrier: Redirect to Login Screen
+  if (!authSession) {
+    return (
+      <LoginScreen
+        onLoginSuccess={(session) => {
+          setAuthSession(session);
+        }}
+      />
+    );
+  }
+
+  const isAdmin = authSession.role === 'admin';
+
+  // 3. Authenticated App Experience
   return (
     <SafeAreaView
       style={[
@@ -165,7 +211,19 @@ function AppContent() {
         )}
 
         {activeTab === 'settings' && (
-          <SettingsScreen onDataReset={loadData} />
+          <SettingsScreen
+            onDataReset={loadData}
+            onLogout={handleLogout}
+            onOpenAdmin={() => setActiveTab('admin')}
+            isAdmin={isAdmin}
+          />
+        )}
+
+        {activeTab === 'admin' && isAdmin && (
+          <AdminScreen
+            currentSession={authSession}
+            onExitAdmin={() => setActiveTab('metronome')}
+          />
         )}
       </View>
 
@@ -318,6 +376,37 @@ function AppContent() {
             Ajustes
           </Text>
         </TouchableOpacity>
+
+        {/* Secret / Dedicated Admin Tab for Administrators */}
+        {isAdmin && (
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={() => setActiveTab('admin')}
+            style={[
+              styles.navTab,
+              activeTab === 'admin' && [
+                styles.navTabActive,
+                { backgroundColor: currentTheme.navActive },
+              ],
+            ]}
+          >
+            <Text style={[styles.navIcon, activeTab === 'admin' && styles.navIconActive]}>
+              👑
+            </Text>
+            <Text
+              style={[
+                styles.navText,
+                { color: currentTheme.textSecondary },
+                activeTab === 'admin' && [
+                  styles.navTextActive,
+                  { color: currentTheme.accent },
+                ],
+              ]}
+            >
+              Admin
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
     </SafeAreaView>
   );
@@ -350,13 +439,13 @@ const styles = StyleSheet.create({
   navTab: {
     alignItems: 'center',
     paddingVertical: 4,
-    paddingHorizontal: 8,
+    paddingHorizontal: 6,
     borderRadius: 8,
-    minWidth: 62,
+    minWidth: 54,
   },
   navTabActive: {},
   navIcon: {
-    fontSize: 20,
+    fontSize: 18,
     marginBottom: 2,
     opacity: 0.6,
   },
@@ -364,7 +453,7 @@ const styles = StyleSheet.create({
     opacity: 1,
   },
   navText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '600',
   },
   navTextActive: {

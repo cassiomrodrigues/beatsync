@@ -19,9 +19,17 @@ import { User } from '@supabase/supabase-js';
 
 interface SettingsScreenProps {
   onDataReset: () => void;
+  onLogout?: () => void;
+  onOpenAdmin?: () => void;
+  isAdmin?: boolean;
 }
 
-export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onDataReset }) => {
+export const SettingsScreen: React.FC<SettingsScreenProps> = ({
+  onDataReset,
+  onLogout,
+  onOpenAdmin,
+  isAdmin = false,
+}) => {
   const { currentTheme, setThemeId, themes } = useTheme();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isAuthModalVisible, setIsAuthModalVisible] = useState(false);
@@ -137,6 +145,28 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onDataReset }) =
         </Text>
       </View>
 
+      {/* Admin Panel Quick Access (if logged in as admin) */}
+      {isAdmin && onOpenAdmin && (
+        <View style={[styles.card, { backgroundColor: currentTheme.card, borderColor: currentTheme.accent, borderWidth: 1.5 }]}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+            <Text style={[styles.cardHeader, { color: currentTheme.accent, marginBottom: 0 }]}>👑 PAINEL DE CONTROLE ADMIN</Text>
+            <View style={{ backgroundColor: currentTheme.accent, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+              <Text style={{ color: '#000', fontSize: 9, fontWeight: '900' }}>ACESSO MASTER</Text>
+            </View>
+          </View>
+          <Text style={[styles.cardDesc, { color: currentTheme.textSecondary }]}>
+            Gerencie os convites e aprove novos e-mails de músicos autorizados a acessar o BeatSync.
+          </Text>
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={onOpenAdmin}
+            style={[styles.primaryBtn, { backgroundColor: currentTheme.accent }]}
+          >
+            <Text style={styles.primaryBtnText}>Abrir Gestão de Convites & Usuários</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* Account & Cloud Sync Section */}
       <View style={[styles.card, { backgroundColor: currentTheme.card, borderColor: currentTheme.border }]}>
         <Text style={[styles.cardHeader, { color: currentTheme.accent }]}>🔐 CONTA & ACESSO SUPABASE</Text>
@@ -171,7 +201,10 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onDataReset }) =
               </TouchableOpacity>
 
               <TouchableOpacity
-                onPress={handleSignOut}
+                onPress={() => {
+                  handleSignOut();
+                  if (onLogout) onLogout();
+                }}
                 style={[styles.signOutBtn, { borderColor: currentTheme.danger }]}
               >
                 <Text style={[styles.signOutBtnText, { color: currentTheme.danger }]}>Sair</Text>
@@ -187,6 +220,17 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onDataReset }) =
               >
                 {syncStatus}
               </Text>
+            )}
+
+            {onLogout && (
+              <TouchableOpacity
+                onPress={onLogout}
+                style={[styles.dangerBtn, { borderColor: currentTheme.danger, marginTop: 12 }]}
+              >
+                <Text style={[styles.dangerBtnText, { color: currentTheme.danger }]}>
+                  🔒 Bloquear App & Trocar de Usuário
+                </Text>
+              </TouchableOpacity>
             )}
           </View>
         ) : (
