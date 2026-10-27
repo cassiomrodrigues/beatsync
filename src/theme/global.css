@@ -1,0 +1,121 @@
+/* Mobile-Native & Tailwind Theme Baseline for BeatSync PWA */
+:root {
+  --bg-primary: #F8FAFC;
+  --bg-card: #FFFFFF;
+  --bg-elevated: #F1F5F9;
+  --border-color: #CBD5E1;
+  --text-primary: #0F172A;
+  --text-secondary: #334155;
+  --text-muted: #64748B;
+  --accent-color: #0284C7;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  color-scheme: light dark;
+}
+
+html.dark {
+  --bg-primary: #000000;
+  --bg-card: #0B0B0B;
+  --bg-elevated: #141414;
+  --border-color: #1F1F1F;
+  --text-primary: #F5F5F5;
+  --text-secondary: #A0A0A0;
+  --text-muted: #707070;
+  --accent-color: #00E5FF;
+}
+
+html,
+body {
+  height: 100vh;
+  height: 100dvh;
+  max-height: 100dvh;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+  max-height: 100dvh;
+  flex: 1;
+  overflow: hidden;
+  background-color: var(--bg-primary);
+}
+
+/* Prevent iOS Safari input auto-zoom (Hard Rule 4: never disable zoom; use >=16px inputs) */
+input,
+textarea,
+select {
+  font-size: 16px !important;
+}
+
+/* Native touch responsiveness & prevent long-press text selection on controls */
+button,
+a,
+[role="button"],
+[role="switch"],
+[role="tab"],
+.tappable {
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  transition: transform 100ms var(--ease-out), opacity 100ms var(--ease-out), background-color 120ms ease;
+}
+
+button:active,
+[role="button"]:active,
+[role="tab"]:active,
+.tappable:active {
+  transform: scale(0.97);
+}
+
+/* Gate hover effects strictly behind fine pointer capability to prevent sticky hover on touch */
+@media (hover: hover) and (pointer: fine) {
+  button:hover,
+  [role="button"]:hover {
+    filter: brightness(1.08);
+  }
+}
+
+/* Safe area utilities */
+.safe-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Independent internal scroll container */
+.overflow-y-auto {
+  overflow-y: auto !important;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Tailwind dark: utility classes for native theme switching */
+.bg-day {
+  background-color: #F8FAFC;
+}
+.dark .dark\:bg-oled,
+html.dark .dark\:bg-black {
+  background-color: #000000 !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
