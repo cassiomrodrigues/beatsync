@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   SafeAreaView,
   View,
@@ -11,6 +11,8 @@ import {
   Alert,
 } from 'react-native';
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import './src/theme/global.css';
 import { Song, Playlist } from './src/types';
 import { StorageService } from './src/storage/storage';
 import { MetronomeScreen } from './src/screens/MetronomeScreen';
@@ -107,10 +109,18 @@ function AppContent() {
     }
   };
 
-  const handleSelectSongForMetronome = (song: Song) => {
+  const handleSelectSongForMetronome = useCallback((song: Song) => {
     setCurrentSong(song);
     setActiveTab('metronome');
-  };
+  }, []);
+
+  const handleClearCurrentSong = useCallback(() => {
+    setCurrentSong(null);
+  }, []);
+
+  const handleOpenSongsTab = useCallback(() => {
+    setActiveTab('songs');
+  }, []);
 
   // CRUD PLAYLIST HANDLERS
   const handleSavePlaylist = async (playlist: Playlist) => {
@@ -180,10 +190,12 @@ function AppContent() {
         styles.safeArea,
         { backgroundColor: currentTheme.background },
       ]}
+      // @ts-expect-error web-only className for 100dvh and Tailwind dark mode
+      className="dark:bg-black bg-day"
     >
-      <ExpoStatusBar style="light" />
+      <ExpoStatusBar style={currentTheme.isDark ? 'light' : 'dark'} />
 
-      {/* Fixed Top Bar with Logout Button across all tabs */}
+      {/* Compact Fixed Top Bar with Safe-Area Top Support */}
       <View
         style={[
           styles.topHeader,
@@ -192,6 +204,8 @@ function AppContent() {
             borderBottomColor: currentTheme.border,
           },
         ]}
+        // @ts-expect-error web-only className for iOS notch safe area
+        className="safe-top"
       >
         <View style={styles.topHeaderLeft}>
           <Text style={[styles.topHeaderLogo, { color: currentTheme.accent }]}>BEATSYNC</Text>
@@ -215,20 +229,26 @@ function AppContent() {
           accessibilityRole="button"
           accessibilityLabel="Sair do aplicativo"
         >
-          <Text style={[styles.fixedLogoutIcon, { color: currentTheme.textSecondary }]}>⎋</Text>
+          <Ionicons name="log-out-outline" size={13} color={currentTheme.textSecondary} />
           <Text style={[styles.fixedLogoutText, { color: currentTheme.textSecondary }]}>Sair</Text>
         </TouchableOpacity>
       </View>
 
       {/* Main Screen Container */}
       <View style={[styles.screenContainer, { backgroundColor: currentTheme.background }]}>
-        {activeTab === 'metronome' && (
+        {/* Keep MetronomeScreen mounted to preserve active audio engine state & avoid remount lag across tab switches */}
+        <View
+          style={[
+            styles.screenContainer,
+            { display: activeTab === 'metronome' ? 'flex' : 'none' },
+          ]}
+        >
           <MetronomeScreen
             currentSong={currentSong}
-            onClearCurrentSong={() => setCurrentSong(null)}
-            onOpenSongsTab={() => setActiveTab('songs')}
+            onClearCurrentSong={handleClearCurrentSong}
+            onOpenSongsTab={handleOpenSongsTab}
           />
-        )}
+        </View>
 
         {activeTab === 'songs' && (
           <SongsScreen
@@ -282,7 +302,7 @@ function AppContent() {
         )}
       </View>
 
-      {/* Bottom Navigation Bar */}
+      {/* Compact Bottom Navigation Bar with Safe-Area Bottom Support */}
       <View
         style={[
           styles.bottomNav,
@@ -291,10 +311,15 @@ function AppContent() {
             borderTopColor: currentTheme.border,
           },
         ]}
+        // @ts-expect-error web-only className for iOS home indicator safe area
+        className="safe-bottom"
       >
         <TouchableOpacity
           activeOpacity={0.8}
           onPress={() => setActiveTab('metronome')}
+          accessibilityRole="tab"
+          accessibilityState={{ selected: activeTab === 'metronome' }}
+          accessibilityLabel="Aba Metrônomo"
           style={[
             styles.navTab,
             activeTab === 'metronome' && [
@@ -303,9 +328,11 @@ function AppContent() {
             ],
           ]}
         >
-          <Text style={[styles.navIcon, activeTab === 'metronome' && styles.navIconActive]}>
-            ⏱
-          </Text>
+          <Ionicons
+            name={activeTab === 'metronome' ? 'speedometer' : 'speedometer-outline'}
+            size={18}
+            color={activeTab === 'metronome' ? currentTheme.accent : currentTheme.textSecondary}
+          />
           <Text
             style={[
               styles.navText,
@@ -323,6 +350,9 @@ function AppContent() {
         <TouchableOpacity
           activeOpacity={0.8}
           onPress={() => setActiveTab('songs')}
+          accessibilityRole="tab"
+          accessibilityState={{ selected: activeTab === 'songs' }}
+          accessibilityLabel="Aba Músicas"
           style={[
             styles.navTab,
             activeTab === 'songs' && [
@@ -331,9 +361,11 @@ function AppContent() {
             ],
           ]}
         >
-          <Text style={[styles.navIcon, activeTab === 'songs' && styles.navIconActive]}>
-            🎵
-          </Text>
+          <Ionicons
+            name={activeTab === 'songs' ? 'musical-notes' : 'musical-notes-outline'}
+            size={18}
+            color={activeTab === 'songs' ? currentTheme.accent : currentTheme.textSecondary}
+          />
           <Text
             style={[
               styles.navText,
@@ -351,6 +383,9 @@ function AppContent() {
         <TouchableOpacity
           activeOpacity={0.8}
           onPress={() => setActiveTab('playlists')}
+          accessibilityRole="tab"
+          accessibilityState={{ selected: activeTab === 'playlists' }}
+          accessibilityLabel="Aba Playlists"
           style={[
             styles.navTab,
             activeTab === 'playlists' && [
@@ -359,9 +394,11 @@ function AppContent() {
             ],
           ]}
         >
-          <Text style={[styles.navIcon, activeTab === 'playlists' && styles.navIconActive]}>
-            📑
-          </Text>
+          <Ionicons
+            name={activeTab === 'playlists' ? 'list' : 'list-outline'}
+            size={18}
+            color={activeTab === 'playlists' ? currentTheme.accent : currentTheme.textSecondary}
+          />
           <Text
             style={[
               styles.navText,
@@ -379,6 +416,9 @@ function AppContent() {
         <TouchableOpacity
           activeOpacity={0.8}
           onPress={() => setActiveTab('live')}
+          accessibilityRole="tab"
+          accessibilityState={{ selected: activeTab === 'live' }}
+          accessibilityLabel="Aba Modo Ao Vivo"
           style={[
             styles.navTab,
             activeTab === 'live' && [
@@ -387,9 +427,11 @@ function AppContent() {
             ],
           ]}
         >
-          <Text style={[styles.navIcon, activeTab === 'live' && styles.navIconActive]}>
-            🎤
-          </Text>
+          <Ionicons
+            name={activeTab === 'live' ? 'mic' : 'mic-outline'}
+            size={18}
+            color={activeTab === 'live' ? currentTheme.accent : currentTheme.textSecondary}
+          />
           <Text
             style={[
               styles.navText,
@@ -407,6 +449,9 @@ function AppContent() {
         <TouchableOpacity
           activeOpacity={0.8}
           onPress={() => setActiveTab('settings')}
+          accessibilityRole="tab"
+          accessibilityState={{ selected: activeTab === 'settings' }}
+          accessibilityLabel="Aba Ajustes"
           style={[
             styles.navTab,
             activeTab === 'settings' && [
@@ -415,9 +460,11 @@ function AppContent() {
             ],
           ]}
         >
-          <Text style={[styles.navIcon, activeTab === 'settings' && styles.navIconActive]}>
-            ⚙️
-          </Text>
+          <Ionicons
+            name={activeTab === 'settings' ? 'settings' : 'settings-outline'}
+            size={18}
+            color={activeTab === 'settings' ? currentTheme.accent : currentTheme.textSecondary}
+          />
           <Text
             style={[
               styles.navText,
@@ -437,6 +484,9 @@ function AppContent() {
           <TouchableOpacity
             activeOpacity={0.8}
             onPress={() => setActiveTab('admin')}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: activeTab === 'admin' }}
+            accessibilityLabel="Aba Admin"
             style={[
               styles.navTab,
               activeTab === 'admin' && [
@@ -445,9 +495,11 @@ function AppContent() {
               ],
             ]}
           >
-            <Text style={[styles.navIcon, activeTab === 'admin' && styles.navIconActive]}>
-              👑
-            </Text>
+            <Ionicons
+              name={activeTab === 'admin' ? 'shield-checkmark' : 'shield-checkmark-outline'}
+              size={18}
+              color={activeTab === 'admin' ? currentTheme.accent : currentTheme.textSecondary}
+            />
             <Text
               style={[
                 styles.navText,
@@ -479,14 +531,22 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     paddingTop: Platform.OS === 'android' ? RNStatusBar.currentHeight : 0,
+    ...(Platform.OS === 'web'
+      ? ({
+          height: '100dvh',
+          maxHeight: '100dvh',
+          overflow: 'hidden',
+        } as any)
+      : {}),
   },
   topHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 14,
-    paddingVertical: 7,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
     borderBottomWidth: 1,
+    flexShrink: 0,
   },
   topHeaderLeft: {
     flexDirection: 'row',
@@ -494,7 +554,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   topHeaderLogo: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '900',
     letterSpacing: 2,
   },
@@ -512,48 +572,42 @@ const styles = StyleSheet.create({
   fixedLogoutBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 5,
-    paddingHorizontal: 9,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
     borderRadius: 6,
     borderWidth: 1,
-    gap: 5,
-  },
-  fixedLogoutIcon: {
-    fontSize: 12,
-    fontWeight: '700',
+    gap: 4,
   },
   fixedLogoutText: {
     fontSize: 11,
     fontWeight: '700',
-    letterSpacing: 0.5,
+    letterSpacing: 0.4,
   },
   screenContainer: {
     flex: 1,
+    minHeight: 0,
+    overflow: 'hidden',
   },
   bottomNav: {
     flexDirection: 'row',
     borderTopWidth: 1,
-    paddingVertical: 8,
+    paddingVertical: 4,
     paddingHorizontal: 6,
     justifyContent: 'space-around',
     alignItems: 'center',
+    flexShrink: 0,
   },
   navTab: {
     alignItems: 'center',
+    justifyContent: 'center',
     paddingVertical: 4,
     paddingHorizontal: 6,
     borderRadius: 8,
     minWidth: 54,
+    minHeight: 44,
+    gap: 2,
   },
   navTabActive: {},
-  navIcon: {
-    fontSize: 18,
-    marginBottom: 2,
-    opacity: 0.6,
-  },
-  navIconActive: {
-    opacity: 1,
-  },
   navText: {
     fontSize: 10,
     fontWeight: '600',

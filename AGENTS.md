@@ -47,4 +47,5 @@ Para orquestração estruturada de demandas, arquitetura e especialistas de soft
 - O contexto técnico vivo e decisões do projeto estão em [.agents/PROJECT_CONTEXT.md](file:///d:/CASSIO/git/beatsync/.agents/PROJECT_CONTEXT.md).
 - Workflows operacionais estão em [.agents/workflows/](file:///d:/CASSIO/git/beatsync/.agents/workflows/).
 - As 7 personas especializadas residem em [.agents/personas/](file:///d:/CASSIO/git/beatsync/.agents/personas/).
+- Skills persistentes do workspace residem em [.agents/skills/](file:///d:/CASSIO/git/beatsync/.agents/skills/) (ex: [`web-pwa-offline-first`](file:///d:/CASSIO/git/beatsync/.agents/skills/web-pwa-offline-first/SKILL.md)).
 

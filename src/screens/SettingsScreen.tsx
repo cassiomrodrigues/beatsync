@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { StorageService } from '../storage/storage';
 import { useTheme, ThemeId } from '../theme/ThemeContext';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { AuthService } from '../supabase/supabaseClient';
 import { CloudLibraryService } from '../supabase/cloudLibrary';
 import { AuthModal } from '../components/AuthModal';
@@ -30,7 +31,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   onOpenAdmin,
   isAdmin = false,
 }) => {
-  const { currentTheme, setThemeId, themes } = useTheme();
+  const { currentTheme, isDark, setThemeId, toggleLightTheme, themes } = useTheme();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isAuthModalVisible, setIsAuthModalVisible] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -250,14 +251,48 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
 
       {/* Selectable Themes Section */}
       <View style={[styles.card, { backgroundColor: currentTheme.card, borderColor: currentTheme.border }]}>
-        <Text style={[styles.cardHeader, { color: currentTheme.accent }]}>
-          🎨 TEMAS & FILOSOFIA DE DESIGN
-        </Text>
-        <Text style={[styles.cardDesc, { color: currentTheme.textSecondary }]}>
-          Selecione o tema ideal para a iluminação do seu ambiente de palco, ensaio ou culto:
-        </Text>
+        <View style={styles.themeSectionTopRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.cardHeader, { color: currentTheme.accent, marginBottom: 2 }]}>
+              TEMAS & MODO DIURNO
+            </Text>
+            <Text style={[styles.cardDesc, { color: currentTheme.textSecondary, marginBottom: 0 }]}>
+              Padrão OLED Zero Luz (#000000) ou Tema Claro para ambientes diurnos.
+            </Text>
+          </View>
 
-        <View style={styles.themeGrid}>
+          {/* Discrete Light Theme Toggle */}
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={toggleLightTheme}
+            accessibilityRole="switch"
+            accessibilityState={{ checked: !isDark }}
+            accessibilityLabel="Alternar entre OLED Zero Luz e Tema Claro Diurno"
+            style={[
+              styles.discreteThemeToggle,
+              {
+                backgroundColor: !isDark ? currentTheme.accent : currentTheme.cardElevated,
+                borderColor: !isDark ? currentTheme.accent : currentTheme.border,
+              },
+            ]}
+          >
+            <Ionicons
+              name={!isDark ? 'sunny' : 'moon'}
+              size={14}
+              color={!isDark ? '#FFFFFF' : currentTheme.accent}
+            />
+            <Text
+              style={[
+                styles.discreteThemeToggleText,
+                { color: !isDark ? '#FFFFFF' : currentTheme.text },
+              ]}
+            >
+              {!isDark ? 'Tema Claro' : 'OLED #000'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={[styles.themeGrid, { marginTop: 12 }]}>
           {themes.map((t) => {
             const isSelected = currentTheme.id === t.id;
             return (
@@ -265,9 +300,15 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 key={t.id}
                 onPress={() => setThemeId(t.id as ThemeId)}
                 activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityState={{ selected: isSelected }}
+                accessibilityLabel={`Selecionar tema ${t.name}`}
                 style={[
                   styles.themeCard,
-                  { backgroundColor: t.isOled ? '#000000' : '#141824', borderColor: isSelected ? t.accent : currentTheme.border },
+                  {
+                    backgroundColor: t.background,
+                    borderColor: isSelected ? t.accent : currentTheme.border,
+                  },
                   isSelected && { borderWidth: 2 },
                 ]}
               >
@@ -283,7 +324,14 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                   </View>
                   {isSelected && (
                     <View style={[styles.activePill, { backgroundColor: t.accent }]}>
-                      <Text style={styles.activePillText}>ATIVO</Text>
+                      <Text
+                        style={[
+                          styles.activePillText,
+                          { color: t.isDark ? '#000000' : '#FFFFFF' },
+                        ]}
+                      >
+                        ATIVO
+                      </Text>
                     </View>
                   )}
                 </View>
@@ -542,6 +590,26 @@ const styles = StyleSheet.create({
     color: '#000',
     fontWeight: '800',
     fontSize: 13,
+  },
+  themeSectionTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  discreteThemeToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    height: 36,
+  },
+  discreteThemeToggleText: {
+    fontSize: 11,
+    fontWeight: '800',
   },
   themeGrid: {
     gap: 10,

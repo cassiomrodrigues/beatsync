@@ -29,6 +29,9 @@ O **BeatSync** é um aplicativo mobile profissional focado em músicos, bandas e
 ## 3. Arquitetura de Pastas e Componentes
 ```
 beatsync/
+├── .agents/                 # Orquestração, personas, workflows e skills do projeto
+│   └── skills/
+│       └── web-pwa-offline-first/ # Skill de arquitetura Local-First e filas de sync
 ├── assets/                  # Ícones, splash screens e fontes estáticas
 ├── src/
 │   ├── audio/              # Motor de áudio procedural e agendamento de tempos

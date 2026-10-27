@@ -1,39 +1,38 @@
-import React, { useState, useRef } from 'react';
-import { TouchableOpacity, Text, StyleSheet, Animated } from 'react-native';
+import React, { useState, useRef, useCallback } from 'react';
+import { TouchableOpacity, Text, StyleSheet, Animated, View } from 'react-native';
+import { useTheme } from '../theme/ThemeContext';
 
 interface TapTempoProps {
   onTempoCalculated: (bpm: number) => void;
 }
 
-export const TapTempo: React.FC<TapTempoProps> = ({ onTempoCalculated }) => {
+export const TapTempo: React.FC<TapTempoProps> = React.memo(({ onTempoCalculated }) => {
+  const { currentTheme } = useTheme();
   const [tapCount, setTapCount] = useState(0);
   const tapTimes = useRef<number[]>([]);
-  const resetTimer = useRef<any>(null);
+  const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
-  const handleTap = () => {
+  const handleTap = useCallback(() => {
     const now = performance.now();
 
-    // Pulse animation
     Animated.sequence([
       Animated.timing(scaleAnim, {
-        toValue: 0.92,
-        duration: 50,
+        toValue: 0.95,
+        duration: 45,
         useNativeDriver: true,
       }),
       Animated.timing(scaleAnim, {
         toValue: 1,
-        duration: 100,
+        duration: 95,
         useNativeDriver: true,
       }),
     ]).start();
 
-    // Clear reset timer
     if (resetTimer.current) {
       clearTimeout(resetTimer.current);
     }
 
-    // Reset if last tap was more than 2.5 seconds ago
     if (tapTimes.current.length > 0) {
       const lastTap = tapTimes.current[tapTimes.current.length - 1];
       if (now - lastTap > 2500) {
@@ -43,7 +42,6 @@ export const TapTempo: React.FC<TapTempoProps> = ({ onTempoCalculated }) => {
 
     tapTimes.current.push(now);
 
-    // Keep up to 6 recent taps
     if (tapTimes.current.length > 6) {
       tapTimes.current.shift();
     }
@@ -52,66 +50,88 @@ export const TapTempo: React.FC<TapTempoProps> = ({ onTempoCalculated }) => {
     setTapCount(count);
 
     if (count >= 2) {
-      // Calculate intervals
-      const intervals: number[] = [];
+      let sumIntervals = 0;
       for (let i = 1; i < count; i++) {
-        intervals.push(tapTimes.current[i] - tapTimes.current[i - 1]);
+        sumIntervals += tapTimes.current[i] - tapTimes.current[i - 1];
       }
+      const avgInterval = sumIntervals / (count - 1);
+      const calculatedBpm = Math.round(60000 / avgInterval);
 
-      // Average interval
-      const avgInterval = intervals.reduce((a, b) => a + b, 0) / intervals.length;
-      const bpm = Math.round(60000 / avgInterval);
-
-      if (bpm >= 20 && bpm <= 320) {
-        onTempoCalculated(bpm);
+      if (calculatedBpm >= 20 && calculatedBpm <= 320) {
+        onTempoCalculated(calculatedBpm);
       }
     }
 
-    // Schedule reset
     resetTimer.current = setTimeout(() => {
       tapTimes.current = [];
       setTapCount(0);
     }, 2500);
-  };
+  }, [onTempoCalculated, scaleAnim]);
 
   return (
-    <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+    <Animated.View style={[styles.wrapper, { transform: [{ scale: scaleAnim }] }]}>
       <TouchableOpacity
-        activeOpacity={0.8}
+        activeOpacity={0.75}
         onPress={handleTap}
-        style={styles.button}
+        accessibilityRole="button"
+        accessibilityLabel="Tap Tempo: toque repetidamente no ritmo para calcular o BPM"
+        style={[
+          styles.button,
+          {
+            backgroundColor: currentTheme.cardElevated,
+            borderColor: tapCount > 0 ? currentTheme.accent : currentTheme.border,
+          },
+        ]}
       >
-        <Text style={styles.title}>TAP TEMPO</Text>
-        <Text style={styles.subtitle}>
-          {tapCount > 1 ? `${tapCount} batidas` : 'Toque no ritmo'}
-        </Text>
+        <View style={styles.row}>
+          <Text style={[styles.title, { color: currentTheme.accent }]}>TAP TEMPO</Text>
+          {tapCount > 1 ? (
+            <View style={[styles.badge, { backgroundColor: currentTheme.accent }]}>
+              <Text style={[styles.badgeText, { color: currentTheme.isDark ? '#000000' : '#FFFFFF' }]}>
+                {tapCount}x
+              </Text>
+            </View>
+          ) : null}
+        </View>
       </TouchableOpacity>
     </Animated.View>
   );
-};
+});
+
+TapTempo.displayName = 'TapTempo';
 
 const styles = StyleSheet.create({
+  wrapper: {
+    flex: 1,
+    minWidth: 108,
+    maxWidth: 150,
+  },
   button: {
-    backgroundColor: '#1E2235',
+    height: 44,
     borderWidth: 1.5,
-    borderColor: '#3D4566',
-    borderRadius: 14,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
+    borderRadius: 10,
+    paddingHorizontal: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    minWidth: 130,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
   },
   title: {
-    color: '#00E5FF',
-    fontSize: 13,
-    fontWeight: '800',
-    letterSpacing: 1.2,
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0.8,
   },
-  subtitle: {
-    color: '#8C98B8',
-    fontSize: 11,
-    marginTop: 2,
-    fontWeight: '500',
+  badge: {
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 6,
+  },
+  badgeText: {
+    fontSize: 10,
+    fontWeight: '900',
   },
 });
