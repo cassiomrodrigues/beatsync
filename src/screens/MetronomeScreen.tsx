@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -7,12 +7,13 @@ import {
   ScrollView,
   Platform,
 } from 'react-native';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { audioEngine } from '../audio/audioEngine';
 import { BeatVisualizer } from '../components/BeatVisualizer';
-import { Pendulum } from '../components/Pendulum';
 import { TapTempo } from '../components/TapTempo';
 import { TimeSignatureModal } from '../components/TimeSignatureModal';
 import { BeatState, Song, SoundType, Subdivision, TimeSignature } from '../types';
+import { useTheme, ThemeColors } from '../theme/ThemeContext';
 
 interface MetronomeScreenProps {
   currentSong: Song | null;
@@ -30,45 +31,404 @@ const TEMPO_MARKINGS = [
   { min: 156, max: 176, name: 'Vivace' },
   { min: 176, max: 200, name: 'Presto' },
   { min: 200, max: 320, name: 'Prestissimo' },
+] as const;
+
+const SUBDIVISION_OPTIONS: ReadonlyArray<{ val: Subdivision; label: string }> = [
+  { val: 1, label: '1/4' },
+  { val: 2, label: '1/8' },
+  { val: 3, label: '3T' },
+  { val: 4, label: '1/16' },
 ];
 
+const SOUND_OPTIONS: ReadonlyArray<{ id: SoundType; name: string }> = [
+  { id: 'woodblock', name: 'Madeira' },
+  { id: 'beep', name: 'Digital' },
+  { id: 'rimshot', name: 'Rimshot' },
+  { id: 'mechanical', name: 'Mecânico' },
+];
+
+const INITIAL_TIME_SIGNATURE: TimeSignature = {
+  numerator: 4,
+  denominator: 4,
+  label: '4/4',
+};
+
+const INITIAL_ACCENT_PATTERN: BeatState[] = ['accent', 'normal', 'normal', 'normal'];
+
 function getTempoName(bpm: number): string {
-  const match = TEMPO_MARKINGS.find((t) => bpm >= t.min && bpm <= t.max);
-  return match ? match.name : 'Allegro';
+  for (let i = 0; i < TEMPO_MARKINGS.length; i++) {
+    const item = TEMPO_MARKINGS[i];
+    if (bpm >= item.min && bpm <= item.max) {
+      return item.name;
+    }
+  }
+  return 'Allegro';
 }
+
+function formatTimer(totalSeconds: number): string {
+  const mins = Math.floor(totalSeconds / 60);
+  const secs = totalSeconds % 60;
+  return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+}
+
+/**
+ * Isolated Practice Timer leaf component.
+ * Prevents 1Hz timer ticks from re-rendering MetronomeScreen or any sibling controls.
+ */
+const PracticeTimerBadge: React.FC<{ isRunning: boolean; theme: ThemeColors }> = React.memo(
+  ({ isRunning, theme }) => {
+    const [seconds, setSeconds] = useState(0);
+
+    useEffect(() => {
+      if (!isRunning) return;
+      const intervalId = setInterval(() => {
+        setSeconds((prev) => prev + 1);
+      }, 1000);
+      return () => clearInterval(intervalId);
+    }, [isRunning]);
+
+    return (
+      <View
+        style={[
+          styles.utilityPill,
+          { backgroundColor: theme.card, borderColor: theme.border },
+        ]}
+        accessibilityLabel={`Tempo de treino: ${formatTimer(seconds)}`}
+      >
+        <Ionicons name="time-outline" size={12} color={theme.success} />
+        <Text style={[styles.timerValueText, { color: theme.success }]}>
+          {formatTimer(seconds)}
+        </Text>
+      </View>
+    );
+  }
+);
+PracticeTimerBadge.displayName = 'PracticeTimerBadge';
+
+/**
+ * Isolated Beat Visualizer & Downbeat Flash section.
+ * Subscribes directly to audioEngine.onBeatCallback so high-frequency beat updates
+ * never re-render the parent MetronomeScreen, BPM display, steppers, or bottom selectors.
+ */
+interface LiveBeatSectionProps {
+  numerator: number;
+  accentPattern: BeatState[];
+  onToggleBeatState: (index: number) => void;
+  isRunning: boolean;
+  flashEnabled: boolean;
+  theme: ThemeColors;
+}
+
+const LiveBeatSection: React.FC<LiveBeatSectionProps> = React.memo(
+  ({ numerator, accentPattern, onToggleBeatState, isRunning, flashEnabled, theme }) => {
+    const [currentBeat, setCurrentBeat] = useState(0);
+    const [isFlashActive, setIsFlashActive] = useState(false);
+    const flashTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    useEffect(() => {
+      if (!isRunning) {
+        setCurrentBeat(0);
+        setIsFlashActive(false);
+      }
+    }, [isRunning]);
+
+    useEffect(() => {
+      audioEngine.onBeatCallback = (beatIndex, isDownbeat) => {
+        setCurrentBeat(beatIndex);
+        if (isDownbeat && flashEnabled) {
+          setIsFlashActive(true);
+          if (flashTimeoutRef.current) clearTimeout(flashTimeoutRef.current);
+          flashTimeoutRef.current = setTimeout(() => {
+            setIsFlashActive(false);
+          }, 80);
+        }
+      };
+
+      return () => {
+        audioEngine.onBeatCallback = null;
+        if (flashTimeoutRef.current) clearTimeout(flashTimeoutRef.current);
+      };
+    }, [flashEnabled]);
+
+    return (
+      <View
+        style={[
+          styles.beatVisualizerBox,
+          {
+            backgroundColor: isFlashActive
+              ? theme.isDark
+                ? '#112233'
+                : '#E0F2FE'
+              : theme.card,
+            borderColor: isFlashActive ? theme.accent : theme.border,
+          },
+        ]}
+      >
+        <BeatVisualizer
+          numerator={numerator}
+          currentBeat={currentBeat}
+          accentPattern={accentPattern}
+          onToggleBeatState={onToggleBeatState}
+          isRunning={isRunning}
+        />
+      </View>
+    );
+  }
+);
+LiveBeatSection.displayName = 'LiveBeatSection';
+
+/**
+ * Memoized single horizontal line of BPM steppers (-5, -1, TAP TEMPO, +1, +5).
+ */
+interface BpmControlsRowProps {
+  onStepMinus5: () => void;
+  onStepMinus1: () => void;
+  onStepPlus1: () => void;
+  onStepPlus5: () => void;
+  onTapTempo: (newBpm: number) => void;
+  theme: ThemeColors;
+}
+
+const BpmControlsRow: React.FC<BpmControlsRowProps> = React.memo(
+  ({ onStepMinus5, onStepMinus1, onStepPlus1, onStepPlus5, onTapTempo, theme }) => {
+    return (
+      <View style={styles.steppersRow}>
+        <TouchableOpacity
+          activeOpacity={0.7}
+          onPress={onStepMinus5}
+          accessibilityRole="button"
+          accessibilityLabel="Diminuir 5 BPM"
+          style={[
+            styles.stepBtn,
+            { backgroundColor: theme.cardElevated, borderColor: theme.border },
+          ]}
+        >
+          <Text style={[styles.stepBtnText, { color: theme.text }]}>−5</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          activeOpacity={0.7}
+          onPress={onStepMinus1}
+          accessibilityRole="button"
+          accessibilityLabel="Diminuir 1 BPM"
+          style={[
+            styles.stepBtn,
+            { backgroundColor: theme.cardElevated, borderColor: theme.border },
+          ]}
+        >
+          <Text style={[styles.stepBtnText, { color: theme.text }]}>−1</Text>
+        </TouchableOpacity>
+
+        <TapTempo onTempoCalculated={onTapTempo} />
+
+        <TouchableOpacity
+          activeOpacity={0.7}
+          onPress={onStepPlus1}
+          accessibilityRole="button"
+          accessibilityLabel="Aumentar 1 BPM"
+          style={[
+            styles.stepBtn,
+            { backgroundColor: theme.cardElevated, borderColor: theme.border },
+          ]}
+        >
+          <Text style={[styles.stepBtnText, { color: theme.text }]}>+1</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          activeOpacity={0.7}
+          onPress={onStepPlus5}
+          accessibilityRole="button"
+          accessibilityLabel="Aumentar 5 BPM"
+          style={[
+            styles.stepBtn,
+            { backgroundColor: theme.cardElevated, borderColor: theme.border },
+          ]}
+        >
+          <Text style={[styles.stepBtnText, { color: theme.text }]}>+5</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+);
+BpmControlsRow.displayName = 'BpmControlsRow';
+
+/**
+ * Memoized Bottom Scrollable Container for Compasso, Subdivisão, and Timbre.
+ * Independent internal scroll (overflow-y-auto) keeps upper critical controls locked.
+ */
+interface BottomParametersContainerProps {
+  timeSignature: TimeSignature;
+  subdivision: Subdivision;
+  soundType: SoundType;
+  onOpenTimeSignatureModal: () => void;
+  onSelectSubdivision: (sub: Subdivision) => void;
+  onSelectSoundType: (sound: SoundType) => void;
+  theme: ThemeColors;
+}
+
+const BottomParametersContainer: React.FC<BottomParametersContainerProps> = React.memo(
+  ({
+    timeSignature,
+    subdivision,
+    soundType,
+    onOpenTimeSignatureModal,
+    onSelectSubdivision,
+    onSelectSoundType,
+    theme,
+  }) => {
+    const activeTextColor = theme.isDark ? '#000000' : '#FFFFFF';
+
+    return (
+      <View
+        style={[
+          styles.bottomContainerWrapper,
+          { borderTopColor: theme.border, backgroundColor: theme.background },
+        ]}
+        // @ts-expect-error web-only className for independent scroll and Tailwind dark mode support
+        className="overflow-y-auto dark:bg-black"
+      >
+        <ScrollView
+          style={styles.bottomScroll}
+          contentContainerStyle={styles.bottomScrollContent}
+          showsVerticalScrollIndicator={true}
+          nestedScrollEnabled={true}
+        >
+          {/* Rhythm Controls Row: Compasso & Subdivisão */}
+          <View style={styles.controlsRow}>
+            <TouchableOpacity
+              activeOpacity={0.75}
+              onPress={onOpenTimeSignatureModal}
+              accessibilityRole="button"
+              accessibilityLabel={`Compasso atual ${timeSignature.label}. Toque para alterar`}
+              style={[
+                styles.timeSigButton,
+                { backgroundColor: theme.card, borderColor: theme.border },
+              ]}
+            >
+              <Text style={[styles.controlLabel, { color: theme.textSecondary }]}>
+                COMPASSO
+              </Text>
+              <Text style={[styles.timeSigValue, { color: theme.accent }]}>
+                {timeSignature.label}
+              </Text>
+            </TouchableOpacity>
+
+            <View
+              style={[
+                styles.subdivisionsBox,
+                { backgroundColor: theme.card, borderColor: theme.border },
+              ]}
+            >
+              <Text style={[styles.controlLabel, { color: theme.textSecondary }]}>
+                SUBDIVISÃO
+              </Text>
+              <View style={styles.subRow}>
+                {SUBDIVISION_OPTIONS.map((sub) => {
+                  const isSelected = subdivision === sub.val;
+                  return (
+                    <TouchableOpacity
+                      key={sub.val}
+                      activeOpacity={0.75}
+                      onPress={() => onSelectSubdivision(sub.val)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Subdivisão ${sub.label}`}
+                      accessibilityState={{ selected: isSelected }}
+                      style={[
+                        styles.subBtn,
+                        {
+                          backgroundColor: isSelected
+                            ? theme.accent
+                            : theme.cardElevated,
+                          borderColor: isSelected ? theme.accent : theme.border,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.subBtnText,
+                          { color: isSelected ? activeTextColor : theme.textSecondary },
+                          isSelected && styles.subBtnTextActive,
+                        ]}
+                      >
+                        {sub.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+          </View>
+
+          {/* Sound / Timbre Selector Card */}
+          <View
+            style={[
+              styles.soundSelectorCard,
+              { backgroundColor: theme.card, borderColor: theme.border },
+            ]}
+          >
+            <Text style={[styles.controlLabel, { color: theme.textSecondary }]}>
+              TIMBRE DO METRÔNOMO
+            </Text>
+            <View style={styles.soundButtonsRow}>
+              {SOUND_OPTIONS.map((s) => {
+                const isSelected = soundType === s.id;
+                return (
+                  <TouchableOpacity
+                    key={s.id}
+                    activeOpacity={0.75}
+                    onPress={() => onSelectSoundType(s.id)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Timbre ${s.name}`}
+                    accessibilityState={{ selected: isSelected }}
+                    style={[
+                      styles.soundChip,
+                      {
+                        backgroundColor: isSelected
+                          ? theme.accent
+                          : theme.cardElevated,
+                        borderColor: isSelected ? theme.accent : theme.border,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.soundChipText,
+                        { color: isSelected ? activeTextColor : theme.textSecondary },
+                        isSelected && styles.soundChipTextActive,
+                      ]}
+                    >
+                      {s.name}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        </ScrollView>
+      </View>
+    );
+  }
+);
+BottomParametersContainer.displayName = 'BottomParametersContainer';
 
 export const MetronomeScreen: React.FC<MetronomeScreenProps> = ({
   currentSong,
   onClearCurrentSong,
   onOpenSongsTab,
 }) => {
+  const { currentTheme } = useTheme();
   const [bpm, setBpm] = useState(120);
-  const [timeSignature, setTimeSignature] = useState<TimeSignature>({
-    numerator: 4,
-    denominator: 4,
-    label: '4/4',
-  });
+  const [timeSignature, setTimeSignature] = useState<TimeSignature>(INITIAL_TIME_SIGNATURE);
   const [subdivision, setSubdivision] = useState<Subdivision>(1);
   const [soundType, setSoundType] = useState<SoundType>('woodblock');
-  const [volume, setVolume] = useState(0.85);
+  const [volume] = useState(0.85);
   const [isMuted, setIsMuted] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
-  const [currentBeat, setCurrentBeat] = useState(0);
-  const [accentPattern, setAccentPattern] = useState<BeatState[]>([
-    'accent',
-    'normal',
-    'normal',
-    'normal',
-  ]);
-  const [isFlashActive, setIsFlashActive] = useState(false);
+  const [accentPattern, setAccentPattern] = useState<BeatState[]>(INITIAL_ACCENT_PATTERN);
   const [flashEnabled, setFlashEnabled] = useState(true);
   const [tsModalVisible, setTsModalVisible] = useState(false);
-  const [timerSeconds, setTimerSeconds] = useState(0);
 
-  // Timer interval
-  const practiceTimerRef = useRef<any>(null);
-
-  // Sync parameters with audio engine
+  // Sync parameters with Web Audio API engine (decoupled from theme changes)
   useEffect(() => {
     audioEngine.updateParameters({
       bpm,
@@ -82,306 +442,322 @@ export const MetronomeScreen: React.FC<MetronomeScreenProps> = ({
     });
   }, [bpm, timeSignature, subdivision, soundType, volume, isMuted, accentPattern]);
 
-  // Audio engine visual callbacks
+  // Load song parameters when a song is selected from the library
   useEffect(() => {
-    audioEngine.onBeatCallback = (beatIndex, isDownbeat) => {
-      setCurrentBeat(beatIndex);
-      if (isDownbeat && flashEnabled) {
-        setIsFlashActive(true);
-        setTimeout(() => setIsFlashActive(false), 80);
-      }
-    };
+    if (!currentSong) return;
+    setBpm(currentSong.bpm);
+    if (currentSong.subdivision) setSubdivision(currentSong.subdivision);
+    if (currentSong.soundType) setSoundType(currentSong.soundType);
 
-    return () => {
-      audioEngine.onBeatCallback = null;
-    };
-  }, [flashEnabled]);
+    const parts = currentSong.timeSignature.split('/');
+    const num = parseInt(parts[0], 10) || 4;
+    const den = parseInt(parts[1], 10) || 4;
+    setTimeSignature({
+      numerator: num,
+      denominator: den,
+      label: currentSong.timeSignature,
+    });
 
-  // If a song is loaded, update metronome state
-  useEffect(() => {
-    if (currentSong) {
-      setBpm(currentSong.bpm);
-      if (currentSong.subdivision) setSubdivision(currentSong.subdivision);
-      if (currentSong.soundType) setSoundType(currentSong.soundType);
-
-      // Parse time signature like "4/4", "6/8", etc.
-      const parts = currentSong.timeSignature.split('/');
-      const num = parseInt(parts[0], 10) || 4;
-      const den = parseInt(parts[1], 10) || 4;
-      const newTs: TimeSignature = {
-        numerator: num,
-        denominator: den,
-        label: currentSong.timeSignature,
-      };
-      setTimeSignature(newTs);
-
-      // Update accent pattern
-      const defaultPattern: BeatState[] = Array.from({ length: num }, (_, i) =>
-        i === 0 ? 'accent' : 'normal'
-      );
-      setAccentPattern(defaultPattern);
-    }
+    const defaultPattern: BeatState[] = Array.from({ length: num }, (_, i) =>
+      i === 0 ? 'accent' : 'normal'
+    );
+    setAccentPattern(defaultPattern);
   }, [currentSong]);
 
-  // Practice timer logic
-  useEffect(() => {
-    if (isRunning) {
-      practiceTimerRef.current = setInterval(() => {
-        setTimerSeconds((prev) => prev + 1);
-      }, 1000);
-    } else {
-      if (practiceTimerRef.current) {
-        clearInterval(practiceTimerRef.current);
-        practiceTimerRef.current = null;
-      }
-    }
-    return () => {
-      if (practiceTimerRef.current) clearInterval(practiceTimerRef.current);
-    };
-  }, [isRunning]);
+  // Stable callbacks to prevent child re-renders
+  const handleStepMinus5 = useCallback(() => {
+    setBpm((b) => Math.max(20, b - 5));
+  }, []);
 
-  // When time signature changes, ensure accentPattern matches length
-  const handleSelectTimeSignature = (newTs: TimeSignature) => {
+  const handleStepMinus1 = useCallback(() => {
+    setBpm((b) => Math.max(20, b - 1));
+  }, []);
+
+  const handleStepPlus1 = useCallback(() => {
+    setBpm((b) => Math.min(320, b + 1));
+  }, []);
+
+  const handleStepPlus5 = useCallback(() => {
+    setBpm((b) => Math.min(320, b + 5));
+  }, []);
+
+  const handleTapTempoCalculated = useCallback((newBpm: number) => {
+    setBpm(newBpm);
+  }, []);
+
+  const handleSelectTimeSignature = useCallback((newTs: TimeSignature) => {
     setTimeSignature(newTs);
     const newPattern: BeatState[] = Array.from(
       { length: newTs.numerator },
       (_, i) => (i === 0 ? 'accent' : 'normal')
     );
     setAccentPattern(newPattern);
-  };
+  }, []);
 
-  const handleToggleBeatState = (index: number) => {
+  const handleToggleBeatState = useCallback((index: number) => {
     const cycle: BeatState[] = ['normal', 'ghost', 'mute', 'accent'];
-    const current = accentPattern[index] || (index === 0 ? 'accent' : 'normal');
-    const nextIndex = (cycle.indexOf(current) + 1) % cycle.length;
-    const nextState = cycle[nextIndex];
+    setAccentPattern((prev) => {
+      const current = prev[index] || (index === 0 ? 'accent' : 'normal');
+      const nextIndex = (cycle.indexOf(current) + 1) % cycle.length;
+      const copy = [...prev];
+      copy[index] = cycle[nextIndex];
+      return copy;
+    });
+  }, []);
 
-    const copy = [...accentPattern];
-    copy[index] = nextState;
-    setAccentPattern(copy);
-  };
+  const handleOpenTsModal = useCallback(() => {
+    setTsModalVisible(true);
+  }, []);
 
-  const togglePlay = () => {
-    if (isRunning) {
-      audioEngine.stop();
-      setIsRunning(false);
-      setCurrentBeat(0);
-    } else {
-      audioEngine.start();
-      setIsRunning(true);
-    }
-  };
+  const handleCloseTsModal = useCallback(() => {
+    setTsModalVisible(false);
+  }, []);
 
-  const formatTimer = (totalSeconds: number) => {
-    const mins = Math.floor(totalSeconds / 60);
-    const secs = totalSeconds % 60;
-    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-  };
+  const handleSelectSubdivision = useCallback((sub: Subdivision) => {
+    setSubdivision(sub);
+  }, []);
+
+  const handleSelectSoundType = useCallback((type: SoundType) => {
+    setSoundType(type);
+    audioEngine.playSinglePreviewSound(type);
+  }, []);
+
+  const handleToggleFlash = useCallback(() => {
+    setFlashEnabled((prev) => !prev);
+  }, []);
+
+  const handleToggleMute = useCallback(() => {
+    setIsMuted((prev) => !prev);
+  }, []);
+
+  const togglePlay = useCallback(() => {
+    setIsRunning((prevRunning) => {
+      if (prevRunning) {
+        audioEngine.stop();
+        return false;
+      } else {
+        audioEngine.start();
+        return true;
+      }
+    });
+  }, []);
+
+  const playBtnTextColor = currentTheme.isDark ? '#000000' : '#FFFFFF';
 
   return (
-    <View style={[styles.container, isFlashActive && styles.flashOverlay]}>
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Active Song Banner */}
-        {currentSong ? (
-          <View style={styles.songBanner}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.songBannerTag}>MÚSICA ATIVA DA BIBLIOTECA</Text>
-              <Text style={styles.songBannerTitle} numberOfLines={1}>
+    <View
+      style={[styles.container, { backgroundColor: currentTheme.background }]}
+      // @ts-expect-error web-only className for Tailwind dark mode
+      className="dark:bg-black bg-day"
+    >
+      {/* LOCKED UPPER STAGE: Always visible on 4.7" screens (iPhone SE) without vertical page scroll */}
+      <View style={styles.upperLockedSection}>
+        {/* 1. Compact Header & Notice Row */}
+        <View style={styles.topBarRow}>
+          {currentSong ? (
+            <View
+              style={[
+                styles.compactSongBanner,
+                {
+                  backgroundColor: currentTheme.card,
+                  borderColor: currentTheme.accent,
+                },
+              ]}
+            >
+              <Ionicons name="musical-notes" size={13} color={currentTheme.accent} />
+              <Text
+                style={[styles.compactSongTitle, { color: currentTheme.text }]}
+                numberOfLines={1}
+              >
                 {currentSong.title}
+                {currentSong.key ? ` (${currentSong.key})` : ''}
               </Text>
-              <Text style={styles.songBannerArtist} numberOfLines={1}>
-                {currentSong.artist} {currentSong.key ? `• Tom: ${currentSong.key}` : ''}
-              </Text>
-              {currentSong.notes && (
-                <Text style={styles.songBannerNotes} numberOfLines={2}>
-                  📝 {currentSong.notes}
-                </Text>
-              )}
+              <TouchableOpacity
+                onPress={onClearCurrentSong}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityRole="button"
+                accessibilityLabel="Liberar música ativa"
+                style={styles.clearSongInlineBtn}
+              >
+                <Ionicons name="close-circle" size={16} color={currentTheme.danger} />
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity onPress={onClearCurrentSong} style={styles.clearSongBtn}>
-              <Text style={styles.clearSongBtnText}>✕ Liberar</Text>
+          ) : (
+            <TouchableOpacity
+              activeOpacity={0.75}
+              onPress={onOpenSongsTab}
+              accessibilityRole="button"
+              accessibilityLabel="Modo Livre: toque para carregar uma música da biblioteca"
+              style={[
+                styles.compactFreeBanner,
+                {
+                  backgroundColor: currentTheme.card,
+                  borderColor: currentTheme.border,
+                },
+              ]}
+            >
+              <Ionicons
+                name="library-outline"
+                size={12}
+                color={currentTheme.textSecondary}
+              />
+              <Text
+                style={[styles.compactFreeText, { color: currentTheme.textSecondary }]}
+                numberOfLines={1}
+              >
+                Modo Livre • Carregar música
+              </Text>
             </TouchableOpacity>
-          </View>
-        ) : (
-          <TouchableOpacity onPress={onOpenSongsTab} style={styles.freeModeBanner}>
-            <Text style={styles.freeModeText}>
-              💡 Modo Livre • Toque para carregar uma música da biblioteca
-            </Text>
-          </TouchableOpacity>
-        )}
+          )}
 
-        {/* Pendulum Animation */}
-        <Pendulum isRunning={isRunning} bpm={bpm} currentBeat={currentBeat} />
+          {/* Quick Utility Pills: Flash, Mute, Timer */}
+          <View style={styles.utilitiesGroup}>
+            <TouchableOpacity
+              activeOpacity={0.75}
+              onPress={handleToggleFlash}
+              accessibilityRole="switch"
+              accessibilityState={{ checked: flashEnabled }}
+              accessibilityLabel="Alternar flash visual no primeiro tempo"
+              style={[
+                styles.utilityBtn,
+                {
+                  backgroundColor: flashEnabled
+                    ? currentTheme.isDark
+                      ? '#26220A'
+                      : '#FEF9C3'
+                    : currentTheme.card,
+                  borderColor: flashEnabled ? '#EAB308' : currentTheme.border,
+                },
+              ]}
+            >
+              <Ionicons
+                name={flashEnabled ? 'flash' : 'flash-off-outline'}
+                size={13}
+                color={flashEnabled ? '#EAB308' : currentTheme.textMuted}
+              />
+            </TouchableOpacity>
 
-        {/* BPM Display Card */}
-        <View style={styles.bpmCard}>
-          <Text style={styles.tempoMarkingText}>{getTempoName(bpm).toUpperCase()}</Text>
-          <View style={styles.bpmDisplayRow}>
-            <Text style={styles.bpmNumber}>{bpm}</Text>
-            <Text style={styles.bpmUnit}>BPM</Text>
-          </View>
+            <TouchableOpacity
+              activeOpacity={0.75}
+              onPress={handleToggleMute}
+              accessibilityRole="switch"
+              accessibilityState={{ checked: !isMuted }}
+              accessibilityLabel={isMuted ? 'Ativar som do metrônomo' : 'Silenciar metrônomo'}
+              style={[
+                styles.utilityBtn,
+                {
+                  backgroundColor: isMuted
+                    ? currentTheme.isDark
+                      ? '#2A1215'
+                      : '#FEE2E2'
+                    : currentTheme.card,
+                  borderColor: isMuted ? currentTheme.danger : currentTheme.border,
+                },
+              ]}
+            >
+              <Ionicons
+                name={isMuted ? 'volume-mute' : 'volume-high'}
+                size={13}
+                color={isMuted ? currentTheme.danger : currentTheme.textSecondary}
+              />
+            </TouchableOpacity>
 
-          {/* Stepper Buttons (-5, -1, +1, +5) */}
-          <View style={styles.steppersRow}>
-            <TouchableOpacity
-              onPress={() => setBpm((b) => Math.max(20, b - 5))}
-              style={styles.stepBtn}
-            >
-              <Text style={styles.stepBtnText}>−5</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => setBpm((b) => Math.max(20, b - 1))}
-              style={styles.stepBtn}
-            >
-              <Text style={styles.stepBtnText}>−1</Text>
-            </TouchableOpacity>
-            <TapTempo onTempoCalculated={(newBpm) => setBpm(newBpm)} />
-            <TouchableOpacity
-              onPress={() => setBpm((b) => Math.min(320, b + 1))}
-              style={styles.stepBtn}
-            >
-              <Text style={styles.stepBtnText}>+1</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => setBpm((b) => Math.min(320, b + 5))}
-              style={styles.stepBtn}
-            >
-              <Text style={styles.stepBtnText}>+5</Text>
-            </TouchableOpacity>
+            <PracticeTimerBadge isRunning={isRunning} theme={currentTheme} />
           </View>
         </View>
 
-        {/* Beat Visualizer with interactive beat states */}
-        <BeatVisualizer
+        {/* 2. Highlighted Centered BPM Display & Single-Line Controls */}
+        <View
+          style={[
+            styles.bpmCard,
+            {
+              backgroundColor: currentTheme.card,
+              borderColor: currentTheme.border,
+            },
+          ]}
+        >
+          <View style={styles.bpmHeroCenter}>
+            <Text style={[styles.tempoMarkingText, { color: currentTheme.accent }]}>
+              {getTempoName(bpm).toUpperCase()}
+            </Text>
+            <View style={styles.bpmDisplayRow}>
+              <Text style={[styles.bpmNumber, { color: currentTheme.text }]}>
+                {bpm}
+              </Text>
+              <Text style={[styles.bpmUnit, { color: currentTheme.textSecondary }]}>
+                BPM
+              </Text>
+            </View>
+          </View>
+
+          {/* 3. Single Horizontal Controls Line (-5, -1, TAP TEMPO, +1, +5) */}
+          <BpmControlsRow
+            onStepMinus5={handleStepMinus5}
+            onStepMinus1={handleStepMinus1}
+            onStepPlus1={handleStepPlus1}
+            onStepPlus5={handleStepPlus5}
+            onTapTempo={handleTapTempoCalculated}
+            theme={currentTheme}
+          />
+        </View>
+
+        {/* 4. Compact Beat Visualizer */}
+        <LiveBeatSection
           numerator={timeSignature.numerator}
-          currentBeat={currentBeat}
           accentPattern={accentPattern}
           onToggleBeatState={handleToggleBeatState}
           isRunning={isRunning}
+          flashEnabled={flashEnabled}
+          theme={currentTheme}
         />
 
-        {/* Rhythm Controls: Compasso & Subdivisões */}
-        <View style={styles.controlsRow}>
-          {/* Time signature button */}
-          <TouchableOpacity
-            onPress={() => setTsModalVisible(true)}
-            style={styles.timeSigButton}
-          >
-            <Text style={styles.controlLabel}>COMPASSO</Text>
-            <Text style={styles.timeSigValue}>{timeSignature.label}</Text>
-          </TouchableOpacity>
-
-          {/* Subdivisions */}
-          <View style={styles.subdivisionsBox}>
-            <Text style={styles.controlLabel}>SUBDIVISÃO</Text>
-            <View style={styles.subRow}>
-              {[
-                { val: 1, label: '1/4' },
-                { val: 2, label: '1/8' },
-                { val: 3, label: '3T' },
-                { val: 4, label: '1/16' },
-              ].map((sub) => (
-                <TouchableOpacity
-                  key={sub.val}
-                  onPress={() => setSubdivision(sub.val as Subdivision)}
-                  style={[
-                    styles.subBtn,
-                    subdivision === sub.val && styles.subBtnActive,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.subBtnText,
-                      subdivision === sub.val && styles.subBtnTextActive,
-                    ]}
-                  >
-                    {sub.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-        </View>
-
-        {/* Sound Selection Row */}
-        <View style={styles.soundSelectorCard}>
-          <Text style={styles.controlLabel}>TIMBRE DO METRÔNOMO</Text>
-          <View style={styles.soundButtonsRow}>
-            {[
-              { id: 'woodblock', name: 'Madeira' },
-              { id: 'beep', name: 'Digital' },
-              { id: 'rimshot', name: 'Rimshot' },
-              { id: 'mechanical', name: 'Mecânico' },
-            ].map((s) => (
-              <TouchableOpacity
-                key={s.id}
-                onPress={() => {
-                  setSoundType(s.id as SoundType);
-                  audioEngine.playSinglePreviewSound(s.id as SoundType);
-                }}
-                style={[
-                  styles.soundChip,
-                  soundType === s.id && styles.soundChipActive,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.soundChipText,
-                    soundType === s.id && styles.soundChipTextActive,
-                  ]}
-                >
-                  {s.name}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        {/* Quick Toggles: Flash & Timer */}
-        <View style={styles.extraControlsRow}>
-          <TouchableOpacity
-            onPress={() => setFlashEnabled(!flashEnabled)}
-            style={[styles.toggleBtn, flashEnabled && styles.toggleBtnActive]}
-          >
-            <Text style={styles.toggleIcon}>{flashEnabled ? '⚡' : '⚪'}</Text>
-            <Text style={styles.toggleText}>Flash Visual</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={() => setIsMuted(!isMuted)}
-            style={[styles.toggleBtn, isMuted && styles.toggleBtnMuted]}
-          >
-            <Text style={styles.toggleIcon}>{isMuted ? '🔇' : '🔊'}</Text>
-            <Text style={styles.toggleText}>{isMuted ? 'Mudo' : 'Som Ativo'}</Text>
-          </TouchableOpacity>
-
-          <View style={styles.timerDisplay}>
-            <Text style={styles.timerLabel}>TREINO</Text>
-            <Text style={styles.timerText}>{formatTimer(timerSeconds)}</Text>
-          </View>
-        </View>
-
-        {/* Giant Main Play/Stop Button */}
+        {/* 5. Main Action Button fixed immediately below Beat Visualizer */}
         <TouchableOpacity
           activeOpacity={0.85}
           onPress={togglePlay}
-          style={[styles.playButton, isRunning ? styles.stopButton : styles.startButton]}
+          accessibilityRole="button"
+          accessibilityState={{ busy: isRunning }}
+          accessibilityLabel={isRunning ? 'Parar Metrônomo' : 'Iniciar Metrônomo'}
+          style={[
+            styles.playButton,
+            {
+              backgroundColor: isRunning ? currentTheme.danger : currentTheme.accent,
+              shadowColor: isRunning ? currentTheme.danger : currentTheme.accent,
+            },
+          ]}
         >
-          <Text style={styles.playIcon}>{isRunning ? '■' : '▶'}</Text>
-          <Text style={styles.playText}>
+          <Ionicons
+            name={isRunning ? 'stop' : 'play'}
+            size={20}
+            color={isRunning ? '#FFFFFF' : playBtnTextColor}
+          />
+          <Text
+            style={[
+              styles.playText,
+              { color: isRunning ? '#FFFFFF' : playBtnTextColor },
+            ]}
+          >
             {isRunning ? 'PARAR METRÔNOMO' : 'INICIAR METRÔNOMO'}
           </Text>
         </TouchableOpacity>
-      </ScrollView>
+      </View>
 
-      {/* Time Signature Modal */}
+      {/* 6. Independent Scrollable Bottom Container (Compasso, Subdivisão, Timbre) */}
+      <BottomParametersContainer
+        timeSignature={timeSignature}
+        subdivision={subdivision}
+        soundType={soundType}
+        onOpenTimeSignatureModal={handleOpenTsModal}
+        onSelectSubdivision={handleSelectSubdivision}
+        onSelectSoundType={handleSelectSoundType}
+        theme={currentTheme}
+      />
+
+      {/* Time Signature Selection Modal */}
       <TimeSignatureModal
         visible={tsModalVisible}
         current={timeSignature}
-        onClose={() => setTsModalVisible(false)}
+        onClose={handleCloseTsModal}
         onSelect={handleSelectTimeSignature}
       />
     </View>
@@ -391,326 +767,265 @@ export const MetronomeScreen: React.FC<MetronomeScreenProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0E1017',
+    overflow: 'hidden',
   },
-  flashOverlay: {
-    backgroundColor: '#1E2838',
+  upperLockedSection: {
+    paddingHorizontal: 12,
+    paddingTop: 6,
+    paddingBottom: 6,
+    flexShrink: 0,
+    gap: 6,
   },
-  scrollContent: {
-    padding: 16,
-    paddingBottom: 40,
-    alignItems: 'center',
-  },
-  songBanner: {
-    width: '100%',
-    backgroundColor: '#162235',
-    borderWidth: 1.5,
-    borderColor: '#00E5FF',
-    borderRadius: 14,
-    padding: 14,
+  topBarRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    justifyContent: 'space-between',
+    gap: 6,
+    minHeight: 32,
   },
-  songBannerTag: {
-    color: '#00E5FF',
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 1,
-    marginBottom: 2,
-  },
-  songBannerTitle: {
-    color: '#FFFFFF',
-    fontSize: 17,
-    fontWeight: '800',
-  },
-  songBannerArtist: {
-    color: '#9EABC7',
-    fontSize: 13,
-    marginTop: 2,
-    fontWeight: '500',
-  },
-  songBannerNotes: {
-    color: '#E0E0E0',
-    fontSize: 12,
-    marginTop: 6,
-    fontStyle: 'italic',
-  },
-  clearSongBtn: {
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    backgroundColor: '#223048',
-    borderRadius: 8,
-    marginLeft: 10,
-  },
-  clearSongBtnText: {
-    color: '#FF7043',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  freeModeBanner: {
-    width: '100%',
-    backgroundColor: '#151722',
-    borderRadius: 10,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    marginBottom: 8,
+  compactSongBanner: {
+    flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#24293D',
+    borderRadius: 8,
+    paddingVertical: 5,
+    paddingHorizontal: 8,
+    gap: 6,
+    minHeight: 32,
   },
-  freeModeText: {
-    color: '#8A92B2',
+  compactSongTitle: {
+    flex: 1,
     fontSize: 12,
+    fontWeight: '800',
+  },
+  clearSongInlineBtn: {
+    padding: 2,
+  },
+  compactFreeBanner: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingVertical: 5,
+    paddingHorizontal: 8,
+    gap: 5,
+    minHeight: 32,
+  },
+  compactFreeText: {
+    fontSize: 11,
     fontWeight: '600',
+    flex: 1,
+  },
+  utilitiesGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  utilityBtn: {
+    width: 34,
+    height: 32,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  utilityPill: {
+    height: 32,
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingHorizontal: 7,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  timerValueText: {
+    fontSize: 11,
+    fontWeight: '800',
+    fontVariant: ['tabular-nums'],
   },
   bpmCard: {
     width: '100%',
-    backgroundColor: '#161924',
     borderWidth: 1,
-    borderColor: '#262C40',
-    borderRadius: 20,
-    paddingVertical: 18,
-    paddingHorizontal: 14,
+    borderRadius: 16,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
     alignItems: 'center',
-    marginBottom: 8,
+  },
+  bpmHeroCenter: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6,
   },
   tempoMarkingText: {
-    color: '#00E5FF',
-    fontSize: 14,
+    fontSize: 11,
     fontWeight: '800',
     letterSpacing: 2,
-    marginBottom: 4,
   },
   bpmDisplayRow: {
     flexDirection: 'row',
     alignItems: 'baseline',
     justifyContent: 'center',
-    marginBottom: 16,
   },
   bpmNumber: {
-    color: '#FFFFFF',
-    fontSize: 76,
+    fontSize: 64,
     fontWeight: '900',
-    lineHeight: 82,
-    letterSpacing: -1,
+    lineHeight: 68,
+    letterSpacing: -1.5,
+    fontVariant: ['tabular-nums'],
   },
   bpmUnit: {
-    color: '#7682A4',
-    fontSize: 20,
-    fontWeight: '700',
-    marginLeft: 8,
+    fontSize: 15,
+    fontWeight: '800',
+    marginLeft: 6,
   },
   steppersRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
+    justifyContent: 'space-between',
+    gap: 6,
     width: '100%',
   },
   stepBtn: {
-    backgroundColor: '#202538',
     borderWidth: 1,
-    borderColor: '#303854',
     borderRadius: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    minWidth: 42,
+    height: 44,
+    minWidth: 46,
+    paddingHorizontal: 8,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   stepBtnText: {
-    color: '#FFFFFF',
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: '800',
+  },
+  beatVisualizerBox: {
+    width: '100%',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingVertical: 4,
+    paddingHorizontal: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  playButton: {
+    width: '100%',
+    height: 48,
+    borderRadius: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  playText: {
+    fontSize: 15,
+    fontWeight: '900',
+    letterSpacing: 1,
+  },
+  bottomContainerWrapper: {
+    flex: 1,
+    minHeight: 0,
+    width: '100%',
+    borderTopWidth: 1,
+  },
+  bottomScroll: {
+    flex: 1,
+    width: '100%',
+  },
+  bottomScrollContent: {
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    paddingBottom: Platform.OS === 'ios' ? 20 : 14,
+    gap: 8,
   },
   controlsRow: {
     flexDirection: 'row',
     width: '100%',
-    gap: 12,
-    marginBottom: 12,
+    gap: 8,
   },
   timeSigButton: {
-    flex: 1,
-    backgroundColor: '#161924',
+    flex: 0.9,
     borderWidth: 1,
-    borderColor: '#262C40',
-    borderRadius: 14,
-    padding: 12,
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
     alignItems: 'center',
     justifyContent: 'center',
+    minHeight: 64,
   },
   controlLabel: {
-    color: '#7C88AB',
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '800',
-    letterSpacing: 1.2,
+    letterSpacing: 1,
     marginBottom: 4,
     textTransform: 'uppercase',
   },
   timeSigValue: {
-    color: '#00E5FF',
-    fontSize: 26,
+    fontSize: 22,
     fontWeight: '900',
   },
   subdivisionsBox: {
-    flex: 1.6,
-    backgroundColor: '#161924',
+    flex: 1.7,
     borderWidth: 1,
-    borderColor: '#262C40',
-    borderRadius: 14,
-    padding: 12,
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
     alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 64,
   },
   subRow: {
     flexDirection: 'row',
-    gap: 6,
-    marginTop: 4,
+    gap: 5,
+    width: '100%',
+    justifyContent: 'center',
   },
   subBtn: {
-    backgroundColor: '#202538',
+    flex: 1,
     borderRadius: 8,
-    paddingVertical: 6,
-    paddingHorizontal: 8,
+    height: 36,
     borderWidth: 1,
-    borderColor: '#303854',
-  },
-  subBtnActive: {
-    backgroundColor: '#00E5FF',
-    borderColor: '#00E5FF',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   subBtnText: {
-    color: '#8C98B8',
     fontSize: 12,
     fontWeight: '700',
   },
   subBtnTextActive: {
-    color: '#0B111D',
+    fontWeight: '900',
   },
   soundSelectorCard: {
     width: '100%',
-    backgroundColor: '#161924',
     borderWidth: 1,
-    borderColor: '#262C40',
-    borderRadius: 14,
-    padding: 12,
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
     alignItems: 'center',
-    marginBottom: 12,
   },
   soundButtonsRow: {
     flexDirection: 'row',
-    gap: 8,
-    marginTop: 6,
+    gap: 6,
     width: '100%',
     justifyContent: 'center',
   },
   soundChip: {
     flex: 1,
-    backgroundColor: '#202538',
     borderWidth: 1,
-    borderColor: '#303854',
     borderRadius: 8,
-    paddingVertical: 8,
+    height: 36,
     alignItems: 'center',
-  },
-  soundChipActive: {
-    backgroundColor: '#11354A',
-    borderColor: '#00E5FF',
+    justifyContent: 'center',
   },
   soundChipText: {
-    color: '#8C98B8',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
   },
   soundChipTextActive: {
-    color: '#00E5FF',
     fontWeight: '800',
-  },
-  extraControlsRow: {
-    flexDirection: 'row',
-    width: '100%',
-    gap: 8,
-    marginBottom: 16,
-    alignItems: 'center',
-  },
-  toggleBtn: {
-    flex: 1,
-    backgroundColor: '#161924',
-    borderWidth: 1,
-    borderColor: '#262C40',
-    borderRadius: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-  },
-  toggleBtnActive: {
-    borderColor: '#FFD600',
-    backgroundColor: '#262518',
-  },
-  toggleBtnMuted: {
-    borderColor: '#FF5252',
-    backgroundColor: '#2A1818',
-  },
-  toggleIcon: {
-    fontSize: 14,
-  },
-  toggleText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  timerDisplay: {
-    flex: 1,
-    backgroundColor: '#161924',
-    borderWidth: 1,
-    borderColor: '#262C40',
-    borderRadius: 10,
-    paddingVertical: 8,
-    alignItems: 'center',
-  },
-  timerLabel: {
-    color: '#7C88AB',
-    fontSize: 9,
-    fontWeight: '800',
-    letterSpacing: 1,
-  },
-  timerText: {
-    color: '#00E676',
-    fontSize: 16,
-    fontWeight: '800',
-    fontVariant: ['tabular-nums'],
-  },
-  playButton: {
-    width: '100%',
-    borderRadius: 18,
-    paddingVertical: 18,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-    shadowOpacity: 0.5,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  startButton: {
-    backgroundColor: '#00E5FF',
-    shadowColor: '#00E5FF',
-  },
-  stopButton: {
-    backgroundColor: '#FF1744',
-    shadowColor: '#FF1744',
-  },
-  playIcon: {
-    color: '#0A0F1D',
-    fontSize: 22,
-    fontWeight: '900',
-  },
-  playText: {
-    color: '#0A0F1D',
-    fontSize: 16,
-    fontWeight: '900',
-    letterSpacing: 1,
   },
 });

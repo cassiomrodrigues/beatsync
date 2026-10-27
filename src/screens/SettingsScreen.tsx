@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,17 +8,81 @@ import {
   TextInput,
   Alert,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { StorageService } from '../storage/storage';
+import { useTheme, ThemeId } from '../theme/ThemeContext';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { AuthService } from '../supabase/supabaseClient';
+import { CloudLibraryService } from '../supabase/cloudLibrary';
+import { AuthModal } from '../components/AuthModal';
+import { User } from '@supabase/supabase-js';
 
 interface SettingsScreenProps {
   onDataReset: () => void;
+  onLogout?: () => void;
+  onOpenAdmin?: () => void;
+  isAdmin?: boolean;
 }
 
-export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onDataReset }) => {
+export const SettingsScreen: React.FC<SettingsScreenProps> = ({
+  onDataReset,
+  onLogout,
+  onOpenAdmin,
+  isAdmin = false,
+}) => {
+  const { currentTheme, isDark, setThemeId, toggleLightTheme, themes } = useTheme();
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [isAuthModalVisible, setIsAuthModalVisible] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<string | null>(null);
+
   const [backupText, setBackupText] = useState('');
   const [importText, setImportText] = useState('');
   const [backupStatus, setBackupStatus] = useState<string | null>(null);
+
+  useEffect(() => {
+    AuthService.getCurrentUser().then(setCurrentUser);
+    const sub = AuthService.onAuthStateChange((user) => {
+      setCurrentUser(user);
+    });
+    return () => {
+      sub?.unsubscribe();
+    };
+  }, []);
+
+  const handleSignOut = async () => {
+    try {
+      await AuthService.signOut();
+      setCurrentUser(null);
+      alert('Sessão encerrada com sucesso.');
+    } catch (e: any) {
+      alert(`Erro ao sair: ${e.message}`);
+    }
+  };
+
+  const handleSyncToCloud = async () => {
+    if (!currentUser) {
+      setIsAuthModalVisible(true);
+      return;
+    }
+
+    setIsSyncing(true);
+    setSyncStatus(null);
+    try {
+      const localSongs = await StorageService.getSongs();
+      let count = 0;
+      for (const song of localSongs) {
+        await CloudLibraryService.uploadSongToCloud(song, Boolean(song.isPublic));
+        count++;
+      }
+      setSyncStatus(`✅ ${count} músicas sincronizadas com sua conta no Supabase!`);
+    } catch (e: any) {
+      setSyncStatus(`❌ Falha na sincronização: ${e.message}`);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   const handleExportBackup = async () => {
     try {
@@ -70,84 +134,300 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onDataReset }) =
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView
+      style={[styles.container, { backgroundColor: currentTheme.background }]}
+      contentContainerStyle={styles.content}
+    >
       {/* Title */}
       <View style={styles.header}>
-        <Text style={styles.title}>Configurações & Backup</Text>
-        <Text style={styles.subtitle}>Gerencie seus dados e preferências do Metrônomo Pro</Text>
+        <Text style={[styles.title, { color: currentTheme.text }]}>Configurações & Nuvem</Text>
+        <Text style={[styles.subtitle, { color: currentTheme.textSecondary }]}>
+          BeatSync PWA • Temas OLED, Supabase & Cloudflare
+        </Text>
+      </View>
+
+      {/* Admin Panel Quick Access (if logged in as admin) */}
+      {isAdmin && onOpenAdmin && (
+        <View style={[styles.card, { backgroundColor: currentTheme.card, borderColor: currentTheme.accent, borderWidth: 1.5 }]}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+            <Text style={[styles.cardHeader, { color: currentTheme.accent, marginBottom: 0 }]}>👑 PAINEL DE CONTROLE ADMIN</Text>
+            <View style={{ backgroundColor: currentTheme.accent, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+              <Text style={{ color: '#000', fontSize: 9, fontWeight: '900' }}>ACESSO MASTER</Text>
+            </View>
+          </View>
+          <Text style={[styles.cardDesc, { color: currentTheme.textSecondary }]}>
+            Gerencie os convites e aprove novos e-mails de músicos autorizados a acessar o BeatSync.
+          </Text>
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={onOpenAdmin}
+            style={[styles.primaryBtn, { backgroundColor: currentTheme.accent }]}
+          >
+            <Text style={styles.primaryBtnText}>Abrir Gestão de Convites & Usuários</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Account & Cloud Sync Section */}
+      <View style={[styles.card, { backgroundColor: currentTheme.card, borderColor: currentTheme.border }]}>
+        <Text style={[styles.cardHeader, { color: currentTheme.accent }]}>🔐 CONTA & ACESSO SUPABASE</Text>
+
+        {currentUser ? (
+          <View>
+            <View style={styles.userInfoRow}>
+              <View style={[styles.userAvatar, { backgroundColor: currentTheme.accent }]}>
+                <Text style={styles.userAvatarText}>
+                  {(currentUser.email || 'M').charAt(0).toUpperCase()}
+                </Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.userEmail, { color: currentTheme.text }]}>{currentUser.email}</Text>
+                <Text style={[styles.userBadge, { color: currentTheme.success }]}>
+                  ● Conectado ao Supabase (Cloud Auth)
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.authButtonsRow}>
+              <TouchableOpacity
+                onPress={handleSyncToCloud}
+                disabled={isSyncing}
+                style={[styles.syncBtn, { backgroundColor: currentTheme.accent }]}
+              >
+                {isSyncing ? (
+                  <ActivityIndicator color="#000" size="small" />
+                ) : (
+                  <Text style={styles.syncBtnText}>☁️ Sincronizar Músicas na Nuvem</Text>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => {
+                  handleSignOut();
+                  if (onLogout) onLogout();
+                }}
+                style={[styles.signOutBtn, { borderColor: currentTheme.danger }]}
+              >
+                <Text style={[styles.signOutBtnText, { color: currentTheme.danger }]}>Sair</Text>
+              </TouchableOpacity>
+            </View>
+
+            {syncStatus && (
+              <Text
+                style={[
+                  styles.syncStatusText,
+                  syncStatus.startsWith('✅') ? { color: currentTheme.success } : { color: currentTheme.danger },
+                ]}
+              >
+                {syncStatus}
+              </Text>
+            )}
+
+            {onLogout && (
+              <TouchableOpacity
+                onPress={onLogout}
+                style={[styles.dangerBtn, { borderColor: currentTheme.danger, marginTop: 12 }]}
+              >
+                <Text style={[styles.dangerBtnText, { color: currentTheme.danger }]}>
+                  🔒 Bloquear App & Trocar de Usuário
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        ) : (
+          <View>
+            <Text style={[styles.authPromoText, { color: currentTheme.textSecondary }]}>
+              Crie uma conta gratuita para sincronizar suas setlists, publicar faixas na Biblioteca Global e compartilhar músicas com sua banda.
+            </Text>
+            <TouchableOpacity
+              onPress={() => setIsAuthModalVisible(true)}
+              style={[styles.loginBtn, { backgroundColor: currentTheme.accent }]}
+            >
+              <Text style={styles.loginBtnText}>Entrar ou Criar Conta com E-mail</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+
+      {/* Selectable Themes Section */}
+      <View style={[styles.card, { backgroundColor: currentTheme.card, borderColor: currentTheme.border }]}>
+        <View style={styles.themeSectionTopRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.cardHeader, { color: currentTheme.accent, marginBottom: 2 }]}>
+              TEMAS & MODO DIURNO
+            </Text>
+            <Text style={[styles.cardDesc, { color: currentTheme.textSecondary, marginBottom: 0 }]}>
+              Padrão OLED Zero Luz (#000000) ou Tema Claro para ambientes diurnos.
+            </Text>
+          </View>
+
+          {/* Discrete Light Theme Toggle */}
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={toggleLightTheme}
+            accessibilityRole="switch"
+            accessibilityState={{ checked: !isDark }}
+            accessibilityLabel="Alternar entre OLED Zero Luz e Tema Claro Diurno"
+            style={[
+              styles.discreteThemeToggle,
+              {
+                backgroundColor: !isDark ? currentTheme.accent : currentTheme.cardElevated,
+                borderColor: !isDark ? currentTheme.accent : currentTheme.border,
+              },
+            ]}
+          >
+            <Ionicons
+              name={!isDark ? 'sunny' : 'moon'}
+              size={14}
+              color={!isDark ? '#FFFFFF' : currentTheme.accent}
+            />
+            <Text
+              style={[
+                styles.discreteThemeToggleText,
+                { color: !isDark ? '#FFFFFF' : currentTheme.text },
+              ]}
+            >
+              {!isDark ? 'Tema Claro' : 'OLED #000'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={[styles.themeGrid, { marginTop: 12 }]}>
+          {themes.map((t) => {
+            const isSelected = currentTheme.id === t.id;
+            return (
+              <TouchableOpacity
+                key={t.id}
+                onPress={() => setThemeId(t.id as ThemeId)}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityState={{ selected: isSelected }}
+                accessibilityLabel={`Selecionar tema ${t.name}`}
+                style={[
+                  styles.themeCard,
+                  {
+                    backgroundColor: t.background,
+                    borderColor: isSelected ? t.accent : currentTheme.border,
+                  },
+                  isSelected && { borderWidth: 2 },
+                ]}
+              >
+                <View style={styles.themeCardHeader}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <View
+                      style={[
+                        styles.themeColorDot,
+                        { backgroundColor: t.accent },
+                      ]}
+                    />
+                    <Text style={[styles.themeName, { color: t.text }]}>{t.name}</Text>
+                  </View>
+                  {isSelected && (
+                    <View style={[styles.activePill, { backgroundColor: t.accent }]}>
+                      <Text
+                        style={[
+                          styles.activePillText,
+                          { color: t.isDark ? '#000000' : '#FFFFFF' },
+                        ]}
+                      >
+                        ATIVO
+                      </Text>
+                    </View>
+                  )}
+                </View>
+                <Text style={[styles.themeTagline, { color: t.textSecondary }]}>
+                  {t.tagline}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
+
+      {/* Cloudflare Pages & Deployment Status */}
+      <View style={[styles.card, { backgroundColor: currentTheme.card, borderColor: currentTheme.border }]}>
+        <Text style={[styles.cardHeader, { color: currentTheme.accent }]}>
+          ⚡ PUBLICAÇÃO & HOSPEDAGEM
+        </Text>
+        <View style={styles.infoRow}>
+          <Text style={[styles.infoLabel, { color: currentTheme.textSecondary }]}>Hospedagem PWA:</Text>
+          <Text style={[styles.infoValue, { color: currentTheme.accent }]}>Cloudflare Pages</Text>
+        </View>
+        <View style={styles.infoRow}>
+          <Text style={[styles.infoLabel, { color: currentTheme.textSecondary }]}>Subdomínio Ativo:</Text>
+          <Text style={[styles.infoValue, { color: currentTheme.text }]}>beatsync-75q.pages.dev</Text>
+        </View>
+        <View style={styles.infoRow}>
+          <Text style={[styles.infoLabel, { color: currentTheme.textSecondary }]}>Banco & Autenticação:</Text>
+          <Text style={[styles.infoValue, { color: currentTheme.success }]}>Supabase PostgreSQL (RLS Ativo)</Text>
+        </View>
+        <View style={styles.infoRow}>
+          <Text style={[styles.infoLabel, { color: currentTheme.textSecondary }]}>Prevenção de Bloqueio:</Text>
+          <Text style={[styles.infoValue, { color: currentTheme.text }]}>Screen Wake Lock Ativo no Player</Text>
+        </View>
       </View>
 
       {/* Guide / How to use */}
-      <View style={styles.card}>
-        <Text style={styles.cardHeader}>💡 GUIA RÁPIDO DO MÚSICO</Text>
+      <View style={[styles.card, { backgroundColor: currentTheme.card, borderColor: currentTheme.border }]}>
+        <Text style={[styles.cardHeader, { color: currentTheme.accent }]}>💡 GUIA RÁPIDO DO MÚSICO</Text>
         <View style={styles.tipRow}>
-          <Text style={styles.tipBullet}>1.</Text>
-          <Text style={styles.tipText}>
-            <Text style={styles.tipHighlight}>Biblioteca de Músicas:</Text> cadastre suas canções com BPM, fórmula de compasso (ex: 4/4, 6/8, 5/4), tom e observações de arranjo.
+          <Text style={[styles.tipBullet, { color: currentTheme.accent }]}>1.</Text>
+          <Text style={[styles.tipText, { color: currentTheme.textSecondary }]}>
+            <Text style={[styles.tipHighlight, { color: currentTheme.text }]}>Biblioteca Particular & Global:</Text> cadastre suas canções com BPM, fórmula de compasso e publique na biblioteca global ou compartilhe por e-mail.
           </Text>
         </View>
         <View style={styles.tipRow}>
-          <Text style={styles.tipBullet}>2.</Text>
-          <Text style={styles.tipText}>
-            <Text style={styles.tipHighlight}>Playlists / Setlists:</Text> crie o roteiro do seu show ou rotina de estudo e adicione as músicas na ordem em que serão tocadas.
+          <Text style={[styles.tipBullet, { color: currentTheme.accent }]}>2.</Text>
+          <Text style={[styles.tipText, { color: currentTheme.textSecondary }]}>
+            <Text style={[styles.tipHighlight, { color: currentTheme.text }]}>Playlists / Setlists:</Text> monte o roteiro do show e ordene as músicas.
           </Text>
         </View>
         <View style={styles.tipRow}>
-          <Text style={styles.tipBullet}>3.</Text>
-          <Text style={styles.tipText}>
-            <Text style={styles.tipHighlight}>Modo Show (Ao Vivo):</Text> use na estante de partitura ou suporte de celular no palco. Texto grande, troca de música com 1 toque e metrônomo instantâneo!
-          </Text>
-        </View>
-        <View style={styles.tipRow}>
-          <Text style={styles.tipBullet}>4.</Text>
-          <Text style={styles.tipText}>
-            <Text style={styles.tipHighlight}>Tap Tempo:</Text> dê 3 ou mais toques no botão TAP TEMPO para identificar o andamento de qualquer música que estiver ouvindo.
+          <Text style={[styles.tipBullet, { color: currentTheme.accent }]}>3.</Text>
+          <Text style={[styles.tipText, { color: currentTheme.textSecondary }]}>
+            <Text style={[styles.tipHighlight, { color: currentTheme.text }]}>Modo Show (Ao Vivo):</Text> texto gigante, troca de música com 1 toque e tela sem desligar (Wake Lock).
           </Text>
         </View>
       </View>
 
-      {/* Export / Backup Section */}
-      <View style={styles.card}>
-        <Text style={styles.cardHeader}>📦 BACKUP & COMPARTILHAMENTO (JSON)</Text>
-        <Text style={styles.cardDesc}>
-          Exporte todo o seu repertório e playlists para salvar com segurança ou compartilhar com os outros integrantes da sua banda.
+      {/* Backup JSON Card */}
+      <View style={[styles.card, { backgroundColor: currentTheme.card, borderColor: currentTheme.border }]}>
+        <Text style={[styles.cardHeader, { color: currentTheme.accent }]}>📦 BACKUP MANUAL (OFFLINE)</Text>
+        <Text style={[styles.cardDesc, { color: currentTheme.textSecondary }]}>
+          Exporte um arquivo de segurança do seu repertório para guardar no computador ou transferir para outro celular:
         </Text>
 
         <TouchableOpacity
           activeOpacity={0.8}
           onPress={handleExportBackup}
-          style={styles.actionBtn}
+          style={[styles.primaryBtn, { backgroundColor: currentTheme.accent }]}
         >
-          <Text style={styles.actionBtnText}>Exportar Backup Agora</Text>
+          <Text style={styles.primaryBtnText}>Gerar Backup JSON</Text>
         </TouchableOpacity>
 
-        {backupStatus && <Text style={styles.statusText}>{backupStatus}</Text>}
+        {backupStatus && (
+          <Text style={[styles.statusText, { color: currentTheme.text }]}>{backupStatus}</Text>
+        )}
 
         {backupText.length > 0 && (
-          <View style={{ marginTop: 10 }}>
-            <TextInput
-              style={styles.jsonBox}
-              multiline
-              editable={false}
-              value={backupText}
-              selectTextOnFocus
-            />
-          </View>
+          <TextInput
+            style={[styles.jsonBox, { backgroundColor: currentTheme.cardElevated, borderColor: currentTheme.border, color: currentTheme.text }]}
+            multiline
+            editable={false}
+            value={backupText}
+            selectTextOnFocus
+          />
         )}
-      </View>
 
-      {/* Import Section */}
-      <View style={styles.card}>
-        <Text style={styles.cardHeader}>📥 RESTAURAR / IMPORTAR BACKUP</Text>
-        <Text style={styles.cardDesc}>
-          Cole abaixo o texto JSON exportado de outro aparelho para carregar a biblioteca de músicas e playlists.
-        </Text>
+        <View style={[styles.divider, { backgroundColor: currentTheme.border }]} />
 
+        <Text style={[styles.sectionSubtitle, { color: currentTheme.text }]}>Restaurar de um Backup JSON:</Text>
         <TextInput
-          style={[styles.jsonBox, { height: 90 }]}
+          style={[styles.inputJson, { backgroundColor: currentTheme.cardElevated, borderColor: currentTheme.border, color: currentTheme.text }]}
+          placeholder="Cole aqui o texto JSON do backup..."
+          placeholderTextColor={currentTheme.textMuted}
           multiline
-          placeholder="Cole o código JSON do backup aqui..."
-          placeholderTextColor="#687394"
+          numberOfLines={3}
           value={importText}
           onChangeText={setImportText}
         />
@@ -155,33 +435,46 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onDataReset }) =
         <TouchableOpacity
           activeOpacity={0.8}
           onPress={handleImportBackup}
-          style={[styles.actionBtn, styles.importBtn]}
+          style={[styles.secondaryBtn, { backgroundColor: currentTheme.cardElevated, borderColor: currentTheme.border }]}
         >
-          <Text style={styles.actionBtnText}>Importar e Restaurar</Text>
+          <Text style={[styles.secondaryBtnText, { color: currentTheme.text }]}>Importar Backup</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Reset Section */}
-      <View style={styles.card}>
-        <Text style={styles.cardHeader}>⚙️ RESTAURAR DADOS DE EXEMPLO</Text>
-        <Text style={styles.cardDesc}>
-          Restaura a biblioteca inicial contendo clássicos do Rock, Bossa Nova, Pop e Jazz em diferentes compassos (4/4, 5/4, 6/8, 7/4, 12/8).
+      {/* Reset Defaults */}
+      <View style={[styles.card, { backgroundColor: currentTheme.card, borderColor: currentTheme.border }]}>
+        <Text style={[styles.cardHeader, { color: currentTheme.danger }]}>⚠️ RESTAURAR EXEMPLOS ORIGINAIS</Text>
+        <Text style={[styles.cardDesc, { color: currentTheme.textSecondary }]}>
+          Restaura a biblioteca inicial de demonstração (Take Five, Billie Jean, etc.). Suas edições atuais serão substituídas.
         </Text>
 
         <TouchableOpacity
           activeOpacity={0.8}
           onPress={handleResetDefaults}
-          style={styles.resetBtn}
+          style={[styles.dangerBtn, { borderColor: currentTheme.danger }]}
         >
-          <Text style={styles.resetBtnText}>Restaurar Músicas Iniciais</Text>
+          <Text style={[styles.dangerBtnText, { color: currentTheme.danger }]}>Restaurar Padrões de Fábrica</Text>
         </TouchableOpacity>
       </View>
 
       {/* App Version Info */}
-      <View style={styles.footerBox}>
-        <Text style={styles.footerTitle}>Metrônomo Pro • iOS & Android</Text>
-        <Text style={styles.footerSub}>Desenvolvido com precisão de estúdio e áudio jitter-free</Text>
+      <View style={styles.footer}>
+        <Text style={[styles.footerText, { color: currentTheme.textMuted }]}>
+          BeatSync v1.0.0 • Progressive Web App (PWA)
+        </Text>
+        <Text style={[styles.footerSub, { color: currentTheme.textMuted }]}>
+          Desenvolvido com precisão Web Audio API para músicos e palcos
+        </Text>
       </View>
+
+      {/* Auth Modal */}
+      <AuthModal
+        visible={isAuthModalVisible}
+        onClose={() => setIsAuthModalVisible(false)}
+        onSuccess={(user) => {
+          setCurrentUser(user);
+        }}
+      />
     </ScrollView>
   );
 };
@@ -189,124 +482,275 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onDataReset }) =
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0E1017',
   },
   content: {
     padding: 16,
-    paddingBottom: 60,
+    paddingBottom: 80,
   },
   header: {
-    marginBottom: 16,
+    marginBottom: 20,
   },
   title: {
-    color: '#FFFFFF',
     fontSize: 22,
-    fontWeight: '800',
+    fontWeight: '900',
   },
   subtitle: {
-    color: '#8A92B2',
-    fontSize: 13,
-    marginTop: 2,
+    fontSize: 12,
+    marginTop: 4,
   },
   card: {
-    backgroundColor: '#161924',
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#262C40',
     padding: 16,
     marginBottom: 16,
   },
   cardHeader: {
-    color: '#00E5FF',
     fontSize: 12,
     fontWeight: '800',
     letterSpacing: 1,
-    marginBottom: 10,
+    marginBottom: 8,
   },
   cardDesc: {
-    color: '#9EABC7',
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 12,
+    lineHeight: 17,
     marginBottom: 14,
+  },
+  userInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    gap: 12,
+  },
+  userAvatar: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  userAvatarText: {
+    color: '#000',
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  userEmail: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  userBadge: {
+    fontSize: 11,
+    marginTop: 2,
+    fontWeight: '600',
+  },
+  authButtonsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 6,
+  },
+  syncBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  syncBtnText: {
+    color: '#000',
+    fontWeight: '800',
+    fontSize: 12,
+  },
+  signOutBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  signOutBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  syncStatusText: {
+    marginTop: 10,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  authPromoText: {
+    fontSize: 12,
+    lineHeight: 18,
+    marginBottom: 12,
+  },
+  loginBtn: {
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  loginBtnText: {
+    color: '#000',
+    fontWeight: '800',
+    fontSize: 13,
+  },
+  themeSectionTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  discreteThemeToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    height: 36,
+  },
+  discreteThemeToggleText: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  themeGrid: {
+    gap: 10,
+  },
+  themeCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 12,
+  },
+  themeCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  themeColorDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+  },
+  themeName: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  activePill: {
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  activePillText: {
+    color: '#000',
+    fontSize: 9,
+    fontWeight: '900',
+  },
+  themeTagline: {
+    fontSize: 11,
+    marginLeft: 18,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: '#222',
+  },
+  infoLabel: {
+    fontSize: 12,
+  },
+  infoValue: {
+    fontSize: 12,
+    fontWeight: '700',
   },
   tipRow: {
     flexDirection: 'row',
-    marginBottom: 10,
+    marginBottom: 8,
   },
   tipBullet: {
-    color: '#00E5FF',
-    fontWeight: '800',
     width: 20,
+    fontWeight: '800',
     fontSize: 13,
   },
   tipText: {
-    color: '#BAC4DE',
-    fontSize: 13,
     flex: 1,
-    lineHeight: 18,
+    fontSize: 12,
+    lineHeight: 17,
   },
   tipHighlight: {
-    color: '#FFFFFF',
     fontWeight: '700',
   },
-  actionBtn: {
-    backgroundColor: '#00E5FF',
+  primaryBtn: {
     borderRadius: 10,
     paddingVertical: 12,
     alignItems: 'center',
+    marginBottom: 8,
   },
-  importBtn: {
-    marginTop: 10,
-    backgroundColor: '#00E676',
-  },
-  actionBtnText: {
-    color: '#09101D',
-    fontSize: 14,
+  primaryBtnText: {
+    color: '#000',
+    fontSize: 13,
     fontWeight: '800',
   },
   statusText: {
-    color: '#00E676',
     fontSize: 12,
-    fontWeight: '700',
-    marginTop: 8,
+    marginVertical: 8,
   },
   jsonBox: {
-    backgroundColor: '#10121C',
     borderWidth: 1,
-    borderColor: '#282F48',
-    borderRadius: 10,
-    color: '#A0B0D0',
-    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
-    fontSize: 11,
+    borderRadius: 8,
     padding: 10,
-    height: 120,
-    textAlignVertical: 'top',
+    height: 100,
+    fontSize: 10,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    marginTop: 8,
   },
-  resetBtn: {
-    backgroundColor: '#202538',
+  divider: {
+    height: 1,
+    marginVertical: 16,
+  },
+  sectionSubtitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+  inputJson: {
     borderWidth: 1,
-    borderColor: '#FF5252',
+    borderRadius: 8,
+    padding: 10,
+    fontSize: 11,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    marginBottom: 10,
+    height: 60,
+  },
+  secondaryBtn: {
+    borderRadius: 10,
+    borderWidth: 1,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  secondaryBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  dangerBtn: {
+    borderWidth: 1,
     borderRadius: 10,
     paddingVertical: 12,
     alignItems: 'center',
   },
-  resetBtnText: {
-    color: '#FF5252',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  footerBox: {
-    alignItems: 'center',
-    marginVertical: 16,
-  },
-  footerTitle: {
-    color: '#657194',
+  dangerBtnText: {
     fontSize: 13,
     fontWeight: '700',
   },
+  footer: {
+    alignItems: 'center',
+    paddingVertical: 20,
+  },
+  footerText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
   footerSub: {
-    color: '#4B5470',
-    fontSize: 11,
-    marginTop: 2,
+    fontSize: 10,
+    marginTop: 4,
   },
 });
