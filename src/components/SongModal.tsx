@@ -11,6 +11,7 @@ import {
   Platform,
 } from 'react-native';
 import { Song, SoundType, Subdivision } from '../types';
+import { useTheme } from '../theme/ThemeContext';
 
 interface SongModalProps {
   visible: boolean;
@@ -28,6 +29,7 @@ export const SongModal: React.FC<SongModalProps> = ({
   onClose,
   onSave,
 }) => {
+  const { currentTheme } = useTheme();
   const [title, setTitle] = useState('');
   const [artist, setArtist] = useState('');
   const [bpm, setBpm] = useState(120);
@@ -94,11 +96,17 @@ export const SongModal: React.FC<SongModalProps> = ({
       soundType,
       isPublic,
       createdAt: songToEdit ? songToEdit.createdAt : Date.now(),
+      // Preserve cloud linkage so edits update the same Supabase row instead of duplicating it
+      cloudId: songToEdit?.cloudId,
+      userId: songToEdit?.userId,
     };
 
     onSave(savedSong);
     onClose();
   };
+
+  const selectedFill = currentTheme.isOled ? '#000000' : currentTheme.navActive;
+  const btnTextColor = currentTheme.isDark ? '#000000' : '#FFFFFF';
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -106,64 +114,92 @@ export const SongModal: React.FC<SongModalProps> = ({
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.overlay}
       >
-        <View style={styles.modalContent}>
+        <View
+          style={[
+            styles.modalContent,
+            { backgroundColor: currentTheme.card, borderColor: currentTheme.border },
+          ]}
+        >
           {/* Header */}
-          <View style={styles.header}>
-            <Text style={styles.title}>
+          <View style={[styles.header, { borderBottomColor: currentTheme.border }]}>
+            <Text style={[styles.title, { color: currentTheme.text }]}>
               {songToEdit ? 'Editar Música' : 'Nova Música na Biblioteca'}
             </Text>
             <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-              <Text style={styles.closeBtn}>✕</Text>
+              <Text style={[styles.closeBtn, { color: currentTheme.textSecondary }]}>✕</Text>
             </TouchableOpacity>
           </View>
 
           <ScrollView style={styles.formScroll} showsVerticalScrollIndicator={false}>
             {/* Song Title */}
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Nome da Música *</Text>
+              <Text style={[styles.label, { color: currentTheme.textSecondary }]}>Nome da Música *</Text>
               <TextInput
-                style={[styles.input, errors.title && styles.inputError]}
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: currentTheme.cardElevated,
+                    borderColor: errors.title ? currentTheme.danger : currentTheme.border,
+                    color: currentTheme.text,
+                  },
+                ]}
                 placeholder="Ex: Billie Jean, Take Five..."
-                placeholderTextColor="#636B84"
+                placeholderTextColor={currentTheme.textMuted}
                 value={title}
                 onChangeText={(val) => {
                   setTitle(val);
                   if (errors.title) setErrors((prev) => ({ ...prev, title: undefined }));
                 }}
               />
-              {errors.title && <Text style={styles.errorText}>{errors.title}</Text>}
+              {errors.title && (
+                <Text style={[styles.errorText, { color: currentTheme.danger }]}>{errors.title}</Text>
+              )}
             </View>
 
             {/* Artist */}
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Artista / Banda *</Text>
+              <Text style={[styles.label, { color: currentTheme.textSecondary }]}>Artista / Banda *</Text>
               <TextInput
-                style={[styles.input, errors.artist && styles.inputError]}
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: currentTheme.cardElevated,
+                    borderColor: errors.artist ? currentTheme.danger : currentTheme.border,
+                    color: currentTheme.text,
+                  },
+                ]}
                 placeholder="Ex: Michael Jackson, Queen, Dave Brubeck..."
-                placeholderTextColor="#636B84"
+                placeholderTextColor={currentTheme.textMuted}
                 value={artist}
                 onChangeText={(val) => {
                   setArtist(val);
                   if (errors.artist) setErrors((prev) => ({ ...prev, artist: undefined }));
                 }}
               />
-              {errors.artist && <Text style={styles.errorText}>{errors.artist}</Text>}
+              {errors.artist && (
+                <Text style={[styles.errorText, { color: currentTheme.danger }]}>{errors.artist}</Text>
+              )}
             </View>
 
             {/* BPM & Compasso Row */}
             <View style={styles.row}>
               {/* BPM */}
               <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
-                <Text style={styles.label}>BPM (Andamento)</Text>
-                <View style={styles.bpmRow}>
+                <Text style={[styles.label, { color: currentTheme.textSecondary }]}>BPM (Andamento)</Text>
+                <View
+                  style={[
+                    styles.bpmRow,
+                    { backgroundColor: currentTheme.cardElevated, borderColor: currentTheme.border },
+                  ]}
+                >
                   <TouchableOpacity
                     onPress={() => setBpm(Math.max(20, bpm - 1))}
                     style={styles.bpmBtn}
                   >
-                    <Text style={styles.bpmBtnText}>−</Text>
+                    <Text style={[styles.bpmBtnText, { color: currentTheme.accent }]}>−</Text>
                   </TouchableOpacity>
                   <TextInput
-                    style={styles.bpmInput}
+                    style={[styles.bpmInput, { color: currentTheme.text }]}
                     keyboardType="numeric"
                     value={String(bpm)}
                     onChangeText={(v) => {
@@ -176,18 +212,25 @@ export const SongModal: React.FC<SongModalProps> = ({
                     onPress={() => setBpm(Math.min(320, bpm + 1))}
                     style={styles.bpmBtn}
                   >
-                    <Text style={styles.bpmBtnText}>+</Text>
+                    <Text style={[styles.bpmBtnText, { color: currentTheme.accent }]}>+</Text>
                   </TouchableOpacity>
                 </View>
               </View>
 
               {/* Compasso */}
               <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
-                <Text style={styles.label}>Compasso</Text>
+                <Text style={[styles.label, { color: currentTheme.textSecondary }]}>Compasso</Text>
                 <TextInput
-                  style={styles.input}
+                  style={[
+                    styles.input,
+                    {
+                      backgroundColor: currentTheme.cardElevated,
+                      borderColor: currentTheme.border,
+                      color: currentTheme.text,
+                    },
+                  ]}
                   placeholder="4/4"
-                  placeholderTextColor="#636B84"
+                  placeholderTextColor={currentTheme.textMuted}
                   value={timeSignature}
                   onChangeText={setTimeSignature}
                 />
@@ -196,76 +239,104 @@ export const SongModal: React.FC<SongModalProps> = ({
 
             {/* Quick Time Signature Presets */}
             <View style={styles.chipsScroll}>
-              {COMMON_SIGNATURES.map((sig) => (
-                <TouchableOpacity
-                  key={sig}
-                  onPress={() => setTimeSignature(sig)}
-                  style={[
-                    styles.chip,
-                    timeSignature === sig && styles.chipSelected,
-                  ]}
-                >
-                  <Text
+              {COMMON_SIGNATURES.map((sig) => {
+                const isSelected = timeSignature === sig;
+                return (
+                  <TouchableOpacity
+                    key={sig}
+                    onPress={() => setTimeSignature(sig)}
                     style={[
-                      styles.chipText,
-                      timeSignature === sig && styles.chipTextSelected,
+                      styles.chip,
+                      {
+                        backgroundColor: isSelected ? selectedFill : currentTheme.cardElevated,
+                        borderColor: isSelected ? currentTheme.accent : currentTheme.border,
+                      },
                     ]}
                   >
-                    {sig}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+                    <Text
+                      style={[
+                        styles.chipText,
+                        { color: isSelected ? currentTheme.accent : currentTheme.textSecondary },
+                        isSelected && { fontWeight: '700' },
+                      ]}
+                    >
+                      {sig}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
 
             {/* Subdivisão */}
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Subdivisão Rítmica</Text>
+              <Text style={[styles.label, { color: currentTheme.textSecondary }]}>Subdivisão Rítmica</Text>
               <View style={styles.subdivisionRow}>
                 {[
                   { value: 1, label: '1/4 (Semínima)' },
                   { value: 2, label: '1/8 (Colcheia)' },
                   { value: 3, label: '1/8T (Tercina)' },
                   { value: 4, label: '1/16 (Semicolcheia)' },
-                ].map((item) => (
-                  <TouchableOpacity
-                    key={item.value}
-                    onPress={() => setSubdivision(item.value as Subdivision)}
-                    style={[
-                      styles.subOption,
-                      subdivision === item.value && styles.subOptionSelected,
-                    ]}
-                  >
-                    <Text
+                ].map((item) => {
+                  const isSelected = subdivision === item.value;
+                  return (
+                    <TouchableOpacity
+                      key={item.value}
+                      onPress={() => setSubdivision(item.value as Subdivision)}
                       style={[
-                        styles.subOptionText,
-                        subdivision === item.value && styles.subOptionTextSelected,
+                        styles.subOption,
+                        {
+                          backgroundColor: isSelected ? selectedFill : currentTheme.cardElevated,
+                          borderColor: isSelected ? currentTheme.accent : currentTheme.border,
+                        },
                       ]}
                     >
-                      {item.label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+                      <Text
+                        style={[
+                          styles.subOptionText,
+                          { color: isSelected ? currentTheme.accent : currentTheme.textSecondary },
+                          isSelected && { fontWeight: '700' },
+                        ]}
+                      >
+                        {item.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
             </View>
 
             {/* Tonalidade & Duração */}
             <View style={styles.row}>
               <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
-                <Text style={styles.label}>Tom (Tonalidade)</Text>
+                <Text style={[styles.label, { color: currentTheme.textSecondary }]}>Tom (Tonalidade)</Text>
                 <TextInput
-                  style={styles.input}
+                  style={[
+                    styles.input,
+                    {
+                      backgroundColor: currentTheme.cardElevated,
+                      borderColor: currentTheme.border,
+                      color: currentTheme.text,
+                    },
+                  ]}
                   placeholder="Ex: Am, C, G#m..."
-                  placeholderTextColor="#636B84"
+                  placeholderTextColor={currentTheme.textMuted}
                   value={key}
                   onChangeText={setKey}
                 />
               </View>
               <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
-                <Text style={styles.label}>Duração Estimada</Text>
+                <Text style={[styles.label, { color: currentTheme.textSecondary }]}>Duração Estimada</Text>
                 <TextInput
-                  style={styles.input}
+                  style={[
+                    styles.input,
+                    {
+                      backgroundColor: currentTheme.cardElevated,
+                      borderColor: currentTheme.border,
+                      color: currentTheme.text,
+                    },
+                  ]}
                   placeholder="Ex: 03:45"
-                  placeholderTextColor="#636B84"
+                  placeholderTextColor={currentTheme.textMuted}
                   value={duration}
                   onChangeText={setDuration}
                 />
@@ -275,58 +346,90 @@ export const SongModal: React.FC<SongModalProps> = ({
             {/* Common keys quick row */}
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
               <View style={{ flexDirection: 'row', gap: 6 }}>
-                {COMMON_KEYS.map((k) => (
-                  <TouchableOpacity
-                    key={k}
-                    onPress={() => setKey(k)}
-                    style={[styles.smallChip, key === k && styles.chipSelected]}
-                  >
-                    <Text style={[styles.smallChipText, key === k && styles.chipTextSelected]}>
-                      {k}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+                {COMMON_KEYS.map((k) => {
+                  const isSelected = key === k;
+                  return (
+                    <TouchableOpacity
+                      key={k}
+                      onPress={() => setKey(k)}
+                      style={[
+                        styles.smallChip,
+                        {
+                          backgroundColor: isSelected ? selectedFill : currentTheme.cardElevated,
+                          borderColor: isSelected ? currentTheme.accent : currentTheme.border,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.smallChipText,
+                          { color: isSelected ? currentTheme.accent : currentTheme.textSecondary },
+                          isSelected && { fontWeight: '700' },
+                        ]}
+                      >
+                        {k}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
             </ScrollView>
 
             {/* Som do Metrônomo para esta música */}
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Timbre do Metrônomo</Text>
+              <Text style={[styles.label, { color: currentTheme.textSecondary }]}>Timbre do Metrônomo</Text>
               <View style={styles.soundRow}>
                 {[
                   { id: 'woodblock', label: 'Madeira' },
                   { id: 'beep', label: 'Beep' },
                   { id: 'rimshot', label: 'Rimshot' },
                   { id: 'mechanical', label: 'Mecânico' },
-                ].map((s) => (
-                  <TouchableOpacity
-                    key={s.id}
-                    onPress={() => setSoundType(s.id as SoundType)}
-                    style={[
-                      styles.soundOption,
-                      soundType === s.id && styles.soundOptionSelected,
-                    ]}
-                  >
-                    <Text
+                ].map((s) => {
+                  const isSelected = soundType === s.id;
+                  return (
+                    <TouchableOpacity
+                      key={s.id}
+                      onPress={() => setSoundType(s.id as SoundType)}
                       style={[
-                        styles.soundOptionText,
-                        soundType === s.id && styles.soundOptionTextSelected,
+                        styles.soundOption,
+                        {
+                          backgroundColor: isSelected ? selectedFill : currentTheme.cardElevated,
+                          borderColor: isSelected ? currentTheme.accent : currentTheme.border,
+                        },
                       ]}
                     >
-                      {s.label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+                      <Text
+                        style={[
+                          styles.soundOptionText,
+                          { color: isSelected ? currentTheme.accent : currentTheme.textSecondary },
+                          isSelected && { fontWeight: '700' },
+                        ]}
+                      >
+                        {s.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
             </View>
 
             {/* Notas / Observações de Palco */}
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Observações de Palco / Arranjo</Text>
+              <Text style={[styles.label, { color: currentTheme.textSecondary }]}>
+                Observações de Palco / Arranjo
+              </Text>
               <TextInput
-                style={[styles.input, styles.textArea]}
+                style={[
+                  styles.input,
+                  styles.textArea,
+                  {
+                    backgroundColor: currentTheme.cardElevated,
+                    borderColor: currentTheme.border,
+                    color: currentTheme.text,
+                  },
+                ]}
                 placeholder="Ex: Entrada após 2 compassos de bateria; Solo no tom de Mi menor..."
-                placeholderTextColor="#636B84"
+                placeholderTextColor={currentTheme.textMuted}
                 multiline
                 numberOfLines={3}
                 value={notes}
@@ -336,21 +439,31 @@ export const SongModal: React.FC<SongModalProps> = ({
 
             {/* Visibilidade: Particular vs Biblioteca Global */}
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Visibilidade & Compartilhamento</Text>
+              <Text style={[styles.label, { color: currentTheme.textSecondary }]}>
+                Visibilidade & Compartilhamento
+              </Text>
               <TouchableOpacity
                 activeOpacity={0.8}
                 onPress={() => setIsPublic(!isPublic)}
                 style={[
                   styles.visibilityCard,
-                  isPublic && styles.visibilityCardPublic,
+                  {
+                    backgroundColor: isPublic ? selectedFill : currentTheme.cardElevated,
+                    borderColor: isPublic ? currentTheme.accent : currentTheme.border,
+                  },
                 ]}
               >
                 <Text style={styles.visibilityIcon}>{isPublic ? '🌐' : '🔒'}</Text>
                 <View style={{ flex: 1, marginLeft: 12 }}>
-                  <Text style={[styles.visibilityTitle, isPublic && styles.visibilityTitlePublic]}>
+                  <Text
+                    style={[
+                      styles.visibilityTitle,
+                      { color: isPublic ? currentTheme.accent : currentTheme.text },
+                    ]}
+                  >
                     {isPublic ? 'Publicada na Biblioteca Global' : 'Música Particular (Apenas Eu)'}
                   </Text>
-                  <Text style={styles.visibilityDesc}>
+                  <Text style={[styles.visibilityDesc, { color: currentTheme.textSecondary }]}>
                     {isPublic
                       ? 'Visível para a comunidade BeatSync. Outros músicos podem pesquisar e importar.'
                       : 'Privada na sua biblioteca. Você também pode compartilhá-la diretamente com usuários específicos.'}
@@ -359,10 +472,13 @@ export const SongModal: React.FC<SongModalProps> = ({
                 <View
                   style={[
                     styles.toggleCircle,
-                    isPublic && styles.toggleCircleActive,
+                    { borderColor: isPublic ? currentTheme.accent : currentTheme.border },
+                    isPublic && { backgroundColor: currentTheme.accent },
                   ]}
                 >
-                  <Text style={styles.toggleCheck}>{isPublic ? '✓' : ''}</Text>
+                  <Text style={[styles.toggleCheck, { color: btnTextColor }]}>
+                    {isPublic ? '✓' : ''}
+                  </Text>
                 </View>
               </TouchableOpacity>
             </View>
@@ -371,9 +487,9 @@ export const SongModal: React.FC<SongModalProps> = ({
             <TouchableOpacity
               activeOpacity={0.8}
               onPress={handleSave}
-              style={styles.saveBtn}
+              style={[styles.saveBtn, { backgroundColor: currentTheme.accent }]}
             >
-              <Text style={styles.saveBtnText}>
+              <Text style={[styles.saveBtnText, { color: btnTextColor }]}>
                 {songToEdit ? 'Atualizar Música' : 'Salvar na Biblioteca'}
               </Text>
             </TouchableOpacity>
@@ -391,7 +507,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: '#181A24',
+    borderWidth: 1,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 20,
@@ -404,15 +520,12 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#282B3C',
   },
   title: {
-    color: '#FFFFFF',
     fontSize: 18,
     fontWeight: '700',
   },
   closeBtn: {
-    color: '#8A8A9E',
     fontSize: 20,
     fontWeight: 'bold',
   },
@@ -423,7 +536,6 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   label: {
-    color: '#A0A6BF',
     fontSize: 12,
     fontWeight: '600',
     marginBottom: 6,
@@ -431,11 +543,8 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
   },
   input: {
-    backgroundColor: '#202436',
     borderWidth: 1,
-    borderColor: '#30364F',
     borderRadius: 10,
-    color: '#FFFFFF',
     paddingHorizontal: 14,
     paddingVertical: 10,
     fontSize: 15,
@@ -444,11 +553,7 @@ const styles = StyleSheet.create({
     height: 70,
     textAlignVertical: 'top',
   },
-  inputError: {
-    borderColor: '#FF5252',
-  },
   errorText: {
-    color: '#FF5252',
     fontSize: 11,
     marginTop: 4,
   },
@@ -458,9 +563,7 @@ const styles = StyleSheet.create({
   bpmRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#202436',
     borderWidth: 1,
-    borderColor: '#30364F',
     borderRadius: 10,
   },
   bpmBtn: {
@@ -468,13 +571,11 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   bpmBtnText: {
-    color: '#00E5FF',
     fontSize: 18,
     fontWeight: 'bold',
   },
   bpmInput: {
     flex: 1,
-    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: 'bold',
     textAlign: 'center',
@@ -486,35 +587,22 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   chip: {
-    backgroundColor: '#202436',
     borderWidth: 1,
-    borderColor: '#30364F',
     borderRadius: 8,
     paddingVertical: 5,
     paddingHorizontal: 10,
   },
-  chipSelected: {
-    borderColor: '#00E5FF',
-    backgroundColor: '#0D384D',
-  },
   chipText: {
-    color: '#A0A6BF',
     fontSize: 12,
     fontWeight: '600',
   },
-  chipTextSelected: {
-    color: '#00E5FF',
-  },
   smallChip: {
-    backgroundColor: '#202436',
     borderWidth: 1,
-    borderColor: '#30364F',
     borderRadius: 6,
     paddingVertical: 4,
     paddingHorizontal: 8,
   },
   smallChipText: {
-    color: '#A0A6BF',
     fontSize: 11,
     fontWeight: '600',
   },
@@ -526,24 +614,14 @@ const styles = StyleSheet.create({
   subOption: {
     flex: 1,
     minWidth: '45%',
-    backgroundColor: '#202436',
     borderWidth: 1,
-    borderColor: '#30364F',
     borderRadius: 8,
     paddingVertical: 8,
     alignItems: 'center',
   },
-  subOptionSelected: {
-    borderColor: '#00E5FF',
-    backgroundColor: '#0D384D',
-  },
   subOptionText: {
-    color: '#A0A6BF',
     fontSize: 12,
     fontWeight: '600',
-  },
-  subOptionTextSelected: {
-    color: '#00E5FF',
   },
   soundRow: {
     flexDirection: 'row',
@@ -551,52 +629,31 @@ const styles = StyleSheet.create({
   },
   soundOption: {
     flex: 1,
-    backgroundColor: '#202436',
     borderWidth: 1,
-    borderColor: '#30364F',
     borderRadius: 8,
     paddingVertical: 8,
     alignItems: 'center',
   },
-  soundOptionSelected: {
-    borderColor: '#00E5FF',
-    backgroundColor: '#0D384D',
-  },
   soundOptionText: {
-    color: '#A0A6BF',
     fontSize: 12,
     fontWeight: '600',
-  },
-  soundOptionTextSelected: {
-    color: '#00E5FF',
   },
   visibilityCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1E2235',
     borderWidth: 1,
-    borderColor: '#2F3652',
     borderRadius: 12,
     padding: 12,
-  },
-  visibilityCardPublic: {
-    borderColor: '#00E5FF',
-    backgroundColor: '#0D2738',
   },
   visibilityIcon: {
     fontSize: 24,
   },
   visibilityTitle: {
-    color: '#E0E6F8',
     fontSize: 14,
     fontWeight: '700',
     marginBottom: 2,
   },
-  visibilityTitlePublic: {
-    color: '#00E5FF',
-  },
   visibilityDesc: {
-    color: '#8A94B2',
     fontSize: 11,
     lineHeight: 15,
   },
@@ -605,22 +662,15 @@ const styles = StyleSheet.create({
     height: 24,
     borderRadius: 12,
     borderWidth: 2,
-    borderColor: '#4A5578',
     justifyContent: 'center',
     alignItems: 'center',
     marginLeft: 8,
   },
-  toggleCircleActive: {
-    borderColor: '#00E5FF',
-    backgroundColor: '#00E5FF',
-  },
   toggleCheck: {
-    color: '#0E1017',
     fontSize: 14,
     fontWeight: '900',
   },
   saveBtn: {
-    backgroundColor: '#00E5FF',
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',
@@ -628,7 +678,6 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   saveBtnText: {
-    color: '#09101D',
     fontSize: 15,
     fontWeight: '800',
   },

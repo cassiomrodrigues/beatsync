@@ -157,8 +157,8 @@ export const AdminScreen: React.FC<AdminScreenProps> = ({ currentSession, onExit
               ● Acesso Total Irrestrito (Master Superadmin)
             </Text>
           </View>
-          <View style={styles.protectedPill}>
-            <Text style={styles.protectedPillText}>PROTEGIDO</Text>
+          <View style={[styles.protectedPill, { backgroundColor: currentTheme.cardElevated, borderColor: currentTheme.border }]}>
+            <Text style={[styles.protectedPillText, { color: currentTheme.textSecondary }]}>PROTEGIDO</Text>
           </View>
         </View>
       </View>
@@ -203,7 +203,7 @@ export const AdminScreen: React.FC<AdminScreenProps> = ({ currentSession, onExit
                   style={[
                     styles.roleChip,
                     { backgroundColor: currentTheme.cardElevated, borderColor: currentTheme.border },
-                    isSelected && { borderColor: currentTheme.accent, backgroundColor: currentTheme.isOled ? '#151515' : '#11354A' },
+                    isSelected && { borderColor: currentTheme.accent, backgroundColor: currentTheme.isOled ? '#000000' : currentTheme.navActive },
                   ]}
                 >
                   <Text
@@ -239,13 +239,13 @@ export const AdminScreen: React.FC<AdminScreenProps> = ({ currentSession, onExit
           <View
             style={[
               styles.feedbackBox,
-              feedback.isError ? styles.feedbackError : styles.feedbackSuccess,
+              feedback.isError ? { backgroundColor: currentTheme.isDark ? '#2F0D0F' : '#FEE2E2', borderWidth: 1, borderColor: currentTheme.danger } : { backgroundColor: currentTheme.isDark ? '#092917' : '#DCFCE7', borderWidth: 1, borderColor: currentTheme.success },
             ]}
           >
             <Text
               style={[
                 styles.feedbackText,
-                feedback.isError ? styles.feedbackTextError : styles.feedbackTextSuccess,
+                { color: feedback.isError ? currentTheme.danger : currentTheme.success },
               ]}
             >
               {feedback.text}
@@ -262,7 +262,7 @@ export const AdminScreen: React.FC<AdminScreenProps> = ({ currentSession, onExit
           {isSubmitting ? (
             <ActivityIndicator color="#000" size="small" />
           ) : (
-            <Text style={styles.submitBtnText}>Criar e Autorizar Acesso</Text>
+            <Text style={[styles.submitBtnText, { color: currentTheme.isDark ? '#000000' : '#FFFFFF' }]}>Criar e Autorizar Acesso</Text>
           )}
         </TouchableOpacity>
       </View>
@@ -303,13 +303,13 @@ export const AdminScreen: React.FC<AdminScreenProps> = ({ currentSession, onExit
                       <View
                         style={[
                           styles.statusBadge,
-                          item.status === 'active' ? styles.statusActive : styles.statusPending,
+                          item.status === 'active' ? { backgroundColor: currentTheme.isDark ? '#0A2B19' : '#DCFCE7', borderWidth: 1, borderColor: currentTheme.success } : { backgroundColor: currentTheme.isDark ? '#30210A' : '#FEF3C7', borderWidth: 1, borderColor: '#D97706' },
                         ]}
                       >
                         <Text
                           style={[
                             styles.statusBadgeText,
-                            item.status === 'active' ? styles.statusActiveText : styles.statusPendingText,
+                            { color: item.status === 'active' ? currentTheme.success : '#D97706' },
                           ]}
                         >
                           {item.status === 'active' ? 'ATIVO' : 'PENDENTE'}
@@ -332,13 +332,13 @@ export const AdminScreen: React.FC<AdminScreenProps> = ({ currentSession, onExit
                       onPress={() => handleToggleStatus(item)}
                       style={[
                         styles.actionBtn,
-                        item.status === 'active' ? styles.btnSuspend : styles.btnActivate,
+                        item.status === 'active' ? { backgroundColor: currentTheme.isDark ? '#332308' : '#FEF3C7', borderWidth: 1, borderColor: '#D97706' } : { backgroundColor: currentTheme.isDark ? '#0D361F' : '#DCFCE7', borderWidth: 1, borderColor: currentTheme.success },
                       ]}
                     >
                       <Text
                         style={[
                           styles.actionBtnText,
-                          item.status === 'active' ? styles.btnSuspendText : styles.btnActivateText,
+                          { color: item.status === 'active' ? '#D97706' : currentTheme.success },
                         ]}
                       >
                         {item.status === 'active' ? 'Suspender' : 'Ativar'}
@@ -347,9 +347,9 @@ export const AdminScreen: React.FC<AdminScreenProps> = ({ currentSession, onExit
 
                     <TouchableOpacity
                       onPress={() => handleDeleteInvite(item)}
-                      style={[styles.actionBtn, styles.btnRevoke]}
+                      style={[styles.actionBtn, { backgroundColor: currentTheme.isDark ? '#2E0E12' : '#FEE2E2', borderWidth: 1, borderColor: currentTheme.danger }]}
                     >
-                      <Text style={styles.btnRevokeText}>Revogar</Text>
+                      <Text style={[styles.btnRevokeText, { color: currentTheme.danger }]}>Revogar</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -477,7 +477,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   protectedPill: {
-    backgroundColor: '#1E1E1E',
+    backgroundColor: '#000000',
     borderWidth: 1,
     borderColor: '#333333',
     paddingHorizontal: 8,

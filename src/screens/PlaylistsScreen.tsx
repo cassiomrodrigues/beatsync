@@ -7,10 +7,10 @@ import {
   FlatList,
   Alert,
   Platform,
-  ScrollView,
 } from 'react-native';
 import { Playlist, Song } from '../types';
 import { PlaylistModal } from '../components/PlaylistModal';
+import { useTheme } from '../theme/ThemeContext';
 
 interface PlaylistsScreenProps {
   playlists: Playlist[];
@@ -33,6 +33,7 @@ export const PlaylistsScreen: React.FC<PlaylistsScreenProps> = ({
   onSelectSongForMetronome,
   onOpenLiveMode,
 }) => {
+  const { currentTheme } = useTheme();
   const [selectedPlaylistId, setSelectedPlaylistId] = useState<string | null>(null);
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [playlistToEdit, setPlaylistToEdit] = useState<Playlist | null>(null);
@@ -68,27 +69,41 @@ export const PlaylistsScreen: React.FC<PlaylistsScreenProps> = ({
     }
   };
 
+  const btnTextColor = currentTheme.isDark ? '#000000' : '#FFFFFF';
+  const selectedFill = currentTheme.isOled ? '#000000' : currentTheme.navActive;
+
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: currentTheme.background }]}>
       {/* If a playlist is selected, show detail view */}
       {selectedPlaylist ? (
         <View style={styles.detailContainer}>
           {/* Header */}
-          <View style={styles.detailHeader}>
+          <View
+            style={[
+              styles.detailHeader,
+              { backgroundColor: currentTheme.card, borderBottomColor: currentTheme.border },
+            ]}
+          >
             <TouchableOpacity
               onPress={() => setSelectedPlaylistId(null)}
               style={styles.backBtn}
             >
-              <Text style={styles.backBtnText}>‹ Voltar às Playlists</Text>
+              <Text style={[styles.backBtnText, { color: currentTheme.accent }]}>
+                ‹ Voltar às Playlists
+              </Text>
             </TouchableOpacity>
 
             <View style={styles.detailTitleRow}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.detailTitle}>{selectedPlaylist.name}</Text>
+                <Text style={[styles.detailTitle, { color: currentTheme.text }]}>
+                  {selectedPlaylist.name}
+                </Text>
                 {selectedPlaylist.description && (
-                  <Text style={styles.detailDesc}>{selectedPlaylist.description}</Text>
+                  <Text style={[styles.detailDesc, { color: currentTheme.textSecondary }]}>
+                    {selectedPlaylist.description}
+                  </Text>
                 )}
-                <Text style={styles.detailStats}>
+                <Text style={[styles.detailStats, { color: currentTheme.success }]}>
                   {selectedPlaylist.songIds.length} músicas no repertório
                 </Text>
               </View>
@@ -99,13 +114,22 @@ export const PlaylistsScreen: React.FC<PlaylistsScreenProps> = ({
                     setPlaylistToEdit(selectedPlaylist);
                     setIsModalVisible(true);
                   }}
-                  style={styles.iconBtn}
+                  style={[
+                    styles.iconBtn,
+                    { backgroundColor: currentTheme.cardElevated, borderColor: currentTheme.border },
+                  ]}
                 >
                   <Text style={styles.iconBtnText}>✏️</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={() => confirmDeletePlaylist(selectedPlaylist)}
-                  style={[styles.iconBtn, styles.deleteBtn]}
+                  style={[
+                    styles.iconBtn,
+                    {
+                      backgroundColor: currentTheme.isDark ? '#2A1215' : '#FEE2E2',
+                      borderColor: currentTheme.danger,
+                    },
+                  ]}
                 >
                   <Text style={styles.iconBtnText}>🗑</Text>
                 </TouchableOpacity>
@@ -117,12 +141,17 @@ export const PlaylistsScreen: React.FC<PlaylistsScreenProps> = ({
               <TouchableOpacity
                 activeOpacity={0.85}
                 onPress={() => onOpenLiveMode(selectedPlaylist)}
-                style={styles.liveModeLaunchBtn}
+                style={[
+                  styles.liveModeLaunchBtn,
+                  { backgroundColor: selectedFill, borderColor: currentTheme.accent },
+                ]}
               >
                 <Text style={styles.liveModeLaunchIcon}>🎤</Text>
                 <View>
-                  <Text style={styles.liveModeLaunchText}>ABRIR MODO AO VIVO / SHOW</Text>
-                  <Text style={styles.liveModeLaunchSub}>
+                  <Text style={[styles.liveModeLaunchText, { color: currentTheme.accent }]}>
+                    ABRIR MODO AO VIVO / SHOW
+                  </Text>
+                  <Text style={[styles.liveModeLaunchSub, { color: currentTheme.textSecondary }]}>
                     Player de palco com visual grande e troca rápida
                   </Text>
                 </View>
@@ -138,8 +167,10 @@ export const PlaylistsScreen: React.FC<PlaylistsScreenProps> = ({
             ListEmptyComponent={
               <View style={styles.emptyPlaylist}>
                 <Text style={styles.emptyEmoji}>📋</Text>
-                <Text style={styles.emptyTitle}>Nenhuma música nesta playlist</Text>
-                <Text style={styles.emptyDesc}>
+                <Text style={[styles.emptyTitle, { color: currentTheme.text }]}>
+                  Nenhuma música nesta playlist
+                </Text>
+                <Text style={[styles.emptyDesc, { color: currentTheme.textSecondary }]}>
                   Vá até a aba "Músicas" e toque em "+ Setlist" em qualquer música para adicioná-la aqui!
                 </Text>
               </View>
@@ -149,29 +180,50 @@ export const PlaylistsScreen: React.FC<PlaylistsScreenProps> = ({
               if (!song) return null;
 
               return (
-                <View style={styles.playlistSongRow}>
+                <View
+                  style={[
+                    styles.playlistSongRow,
+                    { backgroundColor: currentTheme.card, borderColor: currentTheme.border },
+                  ]}
+                >
                   {/* Order Index */}
-                  <View style={styles.orderBadge}>
-                    <Text style={styles.orderNumber}>{index + 1}</Text>
+                  <View
+                    style={[
+                      styles.orderBadge,
+                      { backgroundColor: currentTheme.cardElevated, borderColor: currentTheme.border },
+                    ]}
+                  >
+                    <Text style={[styles.orderNumber, { color: currentTheme.accent }]}>
+                      {index + 1}
+                    </Text>
                   </View>
 
                   {/* Song Info */}
                   <View style={styles.playlistSongInfo}>
-                    <Text style={styles.playlistSongTitle} numberOfLines={1}>
+                    <Text
+                      style={[styles.playlistSongTitle, { color: currentTheme.text }]}
+                      numberOfLines={1}
+                    >
                       {song.title}
                     </Text>
-                    <Text style={styles.playlistSongMeta} numberOfLines={1}>
-                      {song.artist} • <Text style={{ color: '#00E5FF' }}>{song.bpm} BPM</Text> •{' '}
-                      {song.timeSignature} {song.key ? `• ${song.key}` : ''}
+                    <Text
+                      style={[styles.playlistSongMeta, { color: currentTheme.textSecondary }]}
+                      numberOfLines={1}
+                    >
+                      {song.artist} •{' '}
+                      <Text style={{ color: currentTheme.accent, fontWeight: '700' }}>
+                        {song.bpm} BPM
+                      </Text>{' '}
+                      • {song.timeSignature} {song.key ? `• ${song.key}` : ''}
                     </Text>
                   </View>
 
                   {/* Quick Play */}
                   <TouchableOpacity
                     onPress={() => onSelectSongForMetronome(song)}
-                    style={styles.quickPlayBtn}
+                    style={[styles.quickPlayBtn, { backgroundColor: currentTheme.accent }]}
                   >
-                    <Text style={styles.quickPlayIcon}>▶</Text>
+                    <Text style={[styles.quickPlayIcon, { color: btnTextColor }]}>▶</Text>
                   </TouchableOpacity>
 
                   {/* Reorder Buttons */}
@@ -179,19 +231,28 @@ export const PlaylistsScreen: React.FC<PlaylistsScreenProps> = ({
                     <TouchableOpacity
                       disabled={index === 0}
                       onPress={() => onReorderSong(selectedPlaylist.id, index, index - 1)}
-                      style={[styles.reorderBtn, index === 0 && { opacity: 0.3 }]}
+                      style={[
+                        styles.reorderBtn,
+                        { backgroundColor: currentTheme.cardElevated, borderColor: currentTheme.border },
+                        index === 0 && { opacity: 0.3 },
+                      ]}
                     >
-                      <Text style={styles.reorderText}>▲</Text>
+                      <Text style={[styles.reorderText, { color: currentTheme.textSecondary }]}>
+                        ▲
+                      </Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       disabled={index === selectedPlaylist.songIds.length - 1}
                       onPress={() => onReorderSong(selectedPlaylist.id, index, index + 1)}
                       style={[
                         styles.reorderBtn,
+                        { backgroundColor: currentTheme.cardElevated, borderColor: currentTheme.border },
                         index === selectedPlaylist.songIds.length - 1 && { opacity: 0.3 },
                       ]}
                     >
-                      <Text style={styles.reorderText}>▼</Text>
+                      <Text style={[styles.reorderText, { color: currentTheme.textSecondary }]}>
+                        ▼
+                      </Text>
                     </TouchableOpacity>
                   </View>
 
@@ -200,7 +261,7 @@ export const PlaylistsScreen: React.FC<PlaylistsScreenProps> = ({
                     onPress={() => onRemoveSongFromPlaylist(selectedPlaylist.id, index)}
                     style={styles.removeSongBtn}
                   >
-                    <Text style={styles.removeSongText}>✕</Text>
+                    <Text style={[styles.removeSongText, { color: currentTheme.danger }]}>✕</Text>
                   </TouchableOpacity>
                 </View>
               );
@@ -210,9 +271,16 @@ export const PlaylistsScreen: React.FC<PlaylistsScreenProps> = ({
       ) : (
         /* Playlists List View */
         <View style={{ flex: 1 }}>
-          <View style={styles.header}>
-            <Text style={styles.headerTitle}>Minhas Playlists & Setlists</Text>
-            <Text style={styles.headerSubtitle}>
+          <View
+            style={[
+              styles.header,
+              { backgroundColor: currentTheme.card, borderBottomColor: currentTheme.border },
+            ]}
+          >
+            <Text style={[styles.headerTitle, { color: currentTheme.text }]}>
+              Minhas Playlists & Setlists
+            </Text>
+            <Text style={[styles.headerSubtitle, { color: currentTheme.textSecondary }]}>
               Organize suas apresentações, repertórios e rotinas de treino
             </Text>
           </View>
@@ -225,8 +293,10 @@ export const PlaylistsScreen: React.FC<PlaylistsScreenProps> = ({
             ListEmptyComponent={
               <View style={styles.emptyPlaylistsBox}>
                 <Text style={styles.emptyEmoji}>📁</Text>
-                <Text style={styles.emptyTitle}>Nenhuma playlist cadastrada</Text>
-                <Text style={styles.emptyDesc}>
+                <Text style={[styles.emptyTitle, { color: currentTheme.text }]}>
+                  Nenhuma playlist cadastrada
+                </Text>
+                <Text style={[styles.emptyDesc, { color: currentTheme.textSecondary }]}>
                   Crie sua primeira playlist para agrupar as músicas que você vai tocar no show ou ensaio.
                 </Text>
               </View>
@@ -236,27 +306,45 @@ export const PlaylistsScreen: React.FC<PlaylistsScreenProps> = ({
                 <TouchableOpacity
                   activeOpacity={0.8}
                   onPress={() => setSelectedPlaylistId(item.id)}
-                  style={styles.playlistCard}
+                  style={[
+                    styles.playlistCard,
+                    { backgroundColor: currentTheme.card, borderColor: currentTheme.border },
+                  ]}
                 >
                   <View style={styles.playlistCardHeader}>
-                    <View style={styles.playlistIconBox}>
+                    <View
+                      style={[
+                        styles.playlistIconBox,
+                        { backgroundColor: selectedFill, borderColor: currentTheme.border },
+                      ]}
+                    >
                       <Text style={styles.playlistIcon}>🎼</Text>
                     </View>
                     <View style={styles.playlistMainInfo}>
-                      <Text style={styles.playlistCardName}>{item.name}</Text>
+                      <Text style={[styles.playlistCardName, { color: currentTheme.text }]}>
+                        {item.name}
+                      </Text>
                       {item.description && (
-                        <Text style={styles.playlistCardDesc} numberOfLines={2}>
+                        <Text
+                          style={[styles.playlistCardDesc, { color: currentTheme.textSecondary }]}
+                          numberOfLines={2}
+                        >
                           {item.description}
                         </Text>
                       )}
                     </View>
-                    <Text style={styles.cardArrow}>›</Text>
+                    <Text style={[styles.cardArrow, { color: currentTheme.textMuted }]}>›</Text>
                   </View>
 
                   {/* Footer with badges */}
-                  <View style={styles.playlistCardFooter}>
-                    <View style={styles.cardBadge}>
-                      <Text style={styles.cardBadgeText}>
+                  <View style={[styles.playlistCardFooter, { borderTopColor: currentTheme.border }]}>
+                    <View
+                      style={[
+                        styles.cardBadge,
+                        { backgroundColor: currentTheme.cardElevated, borderColor: currentTheme.border },
+                      ]}
+                    >
+                      <Text style={[styles.cardBadgeText, { color: currentTheme.textSecondary }]}>
                         {item.songIds.length} {item.songIds.length === 1 ? 'música' : 'músicas'}
                       </Text>
                     </View>
@@ -266,9 +354,11 @@ export const PlaylistsScreen: React.FC<PlaylistsScreenProps> = ({
                         e.stopPropagation();
                         onOpenLiveMode(item);
                       }}
-                      style={styles.cardLiveBtn}
+                      style={[styles.cardLiveBtn, { backgroundColor: currentTheme.accent }]}
                     >
-                      <Text style={styles.cardLiveBtnText}>Modo Show ▶</Text>
+                      <Text style={[styles.cardLiveBtnText, { color: btnTextColor }]}>
+                        Modo Show ▶
+                      </Text>
                     </TouchableOpacity>
                   </View>
                 </TouchableOpacity>
@@ -283,10 +373,10 @@ export const PlaylistsScreen: React.FC<PlaylistsScreenProps> = ({
               setPlaylistToEdit(null);
               setIsModalVisible(true);
             }}
-            style={styles.fab}
+            style={[styles.fab, { backgroundColor: currentTheme.accent }]}
           >
-            <Text style={styles.fabIcon}>+</Text>
-            <Text style={styles.fabText}>Nova Playlist</Text>
+            <Text style={[styles.fabIcon, { color: btnTextColor }]}>+</Text>
+            <Text style={[styles.fabText, { color: btnTextColor }]}>Nova Playlist</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -308,23 +398,18 @@ export const PlaylistsScreen: React.FC<PlaylistsScreenProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0E1017',
   },
   header: {
     paddingHorizontal: 16,
     paddingTop: 16,
     paddingBottom: 12,
-    backgroundColor: '#161924',
     borderBottomWidth: 1,
-    borderBottomColor: '#262C40',
   },
   headerTitle: {
-    color: '#FFFFFF',
     fontSize: 20,
     fontWeight: '800',
   },
   headerSubtitle: {
-    color: '#8A92B2',
     fontSize: 13,
     marginTop: 2,
   },
@@ -333,9 +418,7 @@ const styles = StyleSheet.create({
     paddingBottom: 90,
   },
   playlistCard: {
-    backgroundColor: '#161924',
     borderWidth: 1,
-    borderColor: '#262C40',
     borderRadius: 16,
     padding: 16,
     marginBottom: 12,
@@ -348,7 +431,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 12,
-    backgroundColor: '#1A2E44',
+    borderWidth: 1,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -361,17 +444,14 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   playlistCardName: {
-    color: '#FFFFFF',
     fontSize: 17,
     fontWeight: '800',
   },
   playlistCardDesc: {
-    color: '#8A92B2',
     fontSize: 12,
     marginTop: 4,
   },
   cardArrow: {
-    color: '#657194',
     fontSize: 26,
     fontWeight: '300',
   },
@@ -382,45 +462,37 @@ const styles = StyleSheet.create({
     marginTop: 14,
     paddingTop: 10,
     borderTopWidth: 1,
-    borderTopColor: '#202538',
   },
   cardBadge: {
-    backgroundColor: '#202538',
+    borderWidth: 1,
     borderRadius: 6,
     paddingVertical: 4,
     paddingHorizontal: 10,
   },
   cardBadgeText: {
-    color: '#BAC4DE',
     fontSize: 12,
     fontWeight: '600',
   },
   cardLiveBtn: {
-    backgroundColor: '#00E5FF',
     borderRadius: 8,
     paddingVertical: 5,
     paddingHorizontal: 12,
   },
   cardLiveBtnText: {
-    color: '#0A101D',
     fontSize: 12,
     fontWeight: '800',
   },
-  // DETAIL STYLES
   detailContainer: {
     flex: 1,
   },
   detailHeader: {
-    backgroundColor: '#161924',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#262C40',
   },
   backBtn: {
     marginBottom: 10,
   },
   backBtnText: {
-    color: '#00E5FF',
     fontSize: 14,
     fontWeight: '700',
   },
@@ -430,17 +502,14 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   detailTitle: {
-    color: '#FFFFFF',
     fontSize: 20,
     fontWeight: '800',
   },
   detailDesc: {
-    color: '#8A92B2',
     fontSize: 13,
     marginTop: 4,
   },
   detailStats: {
-    color: '#00E676',
     fontSize: 12,
     fontWeight: '700',
     marginTop: 4,
@@ -450,21 +519,14 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   iconBtn: {
-    backgroundColor: '#202538',
     borderRadius: 8,
     padding: 8,
     borderWidth: 1,
-    borderColor: '#303854',
-  },
-  deleteBtn: {
-    borderColor: '#543038',
   },
   iconBtnText: {
     fontSize: 13,
   },
   liveModeLaunchBtn: {
-    backgroundColor: '#11354A',
-    borderColor: '#00E5FF',
     borderWidth: 1.5,
     borderRadius: 12,
     padding: 12,
@@ -477,13 +539,11 @@ const styles = StyleSheet.create({
     fontSize: 24,
   },
   liveModeLaunchText: {
-    color: '#00E5FF',
     fontSize: 14,
     fontWeight: '900',
     letterSpacing: 0.5,
   },
   liveModeLaunchSub: {
-    color: '#9EABC7',
     fontSize: 11,
     marginTop: 1,
   },
@@ -492,9 +552,7 @@ const styles = StyleSheet.create({
     paddingBottom: 60,
   },
   playlistSongRow: {
-    backgroundColor: '#161924',
     borderWidth: 1,
-    borderColor: '#262C40',
     borderRadius: 12,
     padding: 12,
     flexDirection: 'row',
@@ -505,13 +563,12 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: '#202538',
+    borderWidth: 1,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 10,
   },
   orderNumber: {
-    color: '#00E5FF',
     fontSize: 13,
     fontWeight: '800',
   },
@@ -520,17 +577,14 @@ const styles = StyleSheet.create({
     marginRight: 6,
   },
   playlistSongTitle: {
-    color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '700',
   },
   playlistSongMeta: {
-    color: '#8A92B2',
     fontSize: 12,
     marginTop: 2,
   },
   quickPlayBtn: {
-    backgroundColor: '#00E5FF',
     width: 32,
     height: 32,
     borderRadius: 16,
@@ -539,7 +593,6 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   quickPlayIcon: {
-    color: '#0A101D',
     fontSize: 12,
     fontWeight: '900',
     marginLeft: 2,
@@ -551,11 +604,10 @@ const styles = StyleSheet.create({
   reorderBtn: {
     paddingHorizontal: 6,
     paddingVertical: 2,
-    backgroundColor: '#202538',
+    borderWidth: 1,
     borderRadius: 4,
   },
   reorderText: {
-    color: '#8A92B2',
     fontSize: 10,
     fontWeight: 'bold',
   },
@@ -563,7 +615,6 @@ const styles = StyleSheet.create({
     padding: 6,
   },
   removeSongText: {
-    color: '#FF5252',
     fontSize: 16,
     fontWeight: 'bold',
   },
@@ -571,25 +622,18 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 24,
     right: 20,
-    backgroundColor: '#00E5FF',
     borderRadius: 30,
     paddingVertical: 14,
     paddingHorizontal: 22,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    shadowColor: '#00E5FF',
-    shadowOpacity: 0.5,
-    shadowRadius: 10,
-    elevation: 8,
   },
   fabIcon: {
-    color: '#0A101D',
     fontSize: 20,
     fontWeight: '900',
   },
   fabText: {
-    color: '#0A101D',
     fontSize: 14,
     fontWeight: '800',
   },
@@ -606,13 +650,11 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   emptyTitle: {
-    color: '#FFFFFF',
     fontSize: 18,
     fontWeight: '700',
     marginBottom: 6,
   },
   emptyDesc: {
-    color: '#7682A4',
     fontSize: 13,
     textAlign: 'center',
     maxWidth: 280,

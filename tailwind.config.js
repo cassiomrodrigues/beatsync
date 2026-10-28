@@ -10,8 +10,8 @@ module.exports = {
       colors: {
         oled: {
           bg: '#000000',
-          card: '#0B0B0B',
-          elevated: '#141414',
+          card: '#000000',
+          elevated: '#000000',
           border: '#1F1F1F',
           text: '#F5F5F5',
           secondary: '#A0A0A0',

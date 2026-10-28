@@ -14,8 +14,8 @@
 
 html.dark {
   --bg-primary: #000000;
-  --bg-card: #0B0B0B;
-  --bg-elevated: #141414;
+  --bg-card: #000000;
+  --bg-elevated: #000000;
   --border-color: #1F1F1F;
   --text-primary: #F5F5F5;
   --text-secondary: #A0A0A0;

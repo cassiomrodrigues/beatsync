@@ -164,8 +164,8 @@ function AppContent() {
   // 1. Initial Authentication Loading State
   if (isAuthLoading) {
     return (
-      <SafeAreaView style={[styles.safeArea, { backgroundColor: '#000000', justifyContent: 'center', alignItems: 'center' }]}>
-        <ActivityIndicator size="large" color="#00E5FF" />
+      <SafeAreaView style={[styles.safeArea, { backgroundColor: currentTheme.background, justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={currentTheme.accent} />
       </SafeAreaView>
     );
   }

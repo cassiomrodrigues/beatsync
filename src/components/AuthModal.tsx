@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { AuthService } from '../supabase/supabaseClient';
 import { User } from '@supabase/supabase-js';
+import { useTheme } from '../theme/ThemeContext';
 
 interface AuthModalProps {
   visible: boolean;
@@ -22,6 +23,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   onClose,
   onSuccess,
 }) => {
+  const { currentTheme } = useTheme();
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -72,35 +74,49 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
   };
 
+  const btnTextColor = currentTheme.isDark ? '#000000' : '#FFFFFF';
+
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.overlay}>
-        <View style={styles.card}>
+        <View
+          style={[
+            styles.card,
+            { backgroundColor: currentTheme.card, borderColor: currentTheme.border },
+          ]}
+        >
           {/* Header */}
           <View style={styles.header}>
-            <View>
-              <Text style={styles.headerTitle}>
+            <View style={{ flex: 1, marginRight: 8 }}>
+              <Text style={[styles.headerTitle, { color: currentTheme.accent }]}>
                 {isSignUp ? '🎵 Criar Conta BeatSync' : '🔐 Entrar no BeatSync'}
               </Text>
-              <Text style={styles.headerSubtitle}>
+              <Text style={[styles.headerSubtitle, { color: currentTheme.textSecondary }]}>
                 {isSignUp
                   ? 'Sincronize seu repertório e acesse a Biblioteca Global'
                   : 'Acesse suas músicas e setlists em qualquer dispositivo'}
               </Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-              <Text style={styles.closeText}>✕</Text>
+              <Text style={[styles.closeText, { color: currentTheme.textSecondary }]}>✕</Text>
             </TouchableOpacity>
           </View>
 
           {/* Form */}
           {isSignUp && (
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Nome ou Banda</Text>
+              <Text style={[styles.label, { color: currentTheme.textSecondary }]}>Nome ou Banda</Text>
               <TextInput
-                style={styles.input}
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: currentTheme.cardElevated,
+                    borderColor: currentTheme.border,
+                    color: currentTheme.text,
+                  },
+                ]}
                 placeholder="Ex: João Silva ou Ministério de Louvor"
-                placeholderTextColor="#687394"
+                placeholderTextColor={currentTheme.textMuted}
                 value={displayName}
                 onChangeText={setDisplayName}
               />
@@ -108,11 +124,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           )}
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>E-mail</Text>
+            <Text style={[styles.label, { color: currentTheme.textSecondary }]}>E-mail</Text>
             <TextInput
-              style={styles.input}
+              style={[
+                styles.input,
+                {
+                  backgroundColor: currentTheme.cardElevated,
+                  borderColor: currentTheme.border,
+                  color: currentTheme.text,
+                },
+              ]}
               placeholder="seu-email@exemplo.com"
-              placeholderTextColor="#687394"
+              placeholderTextColor={currentTheme.textMuted}
               value={email}
               onChangeText={setEmail}
               autoCapitalize="none"
@@ -121,11 +144,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Senha</Text>
+            <Text style={[styles.label, { color: currentTheme.textSecondary }]}>Senha</Text>
             <TextInput
-              style={styles.input}
+              style={[
+                styles.input,
+                {
+                  backgroundColor: currentTheme.cardElevated,
+                  borderColor: currentTheme.border,
+                  color: currentTheme.text,
+                },
+              ]}
               placeholder="Mínimo de 6 dígitos"
-              placeholderTextColor="#687394"
+              placeholderTextColor={currentTheme.textMuted}
               value={password}
               onChangeText={setPassword}
               secureTextEntry
@@ -133,22 +163,34 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           </View>
 
           {errorMessage && (
-            <View style={styles.errorBox}>
-              <Text style={styles.errorText}>⚠️ {errorMessage}</Text>
+            <View
+              style={[
+                styles.errorBox,
+                {
+                  backgroundColor: currentTheme.isDark ? '#351114' : '#FEE2E2',
+                  borderColor: currentTheme.danger,
+                },
+              ]}
+            >
+              <Text style={[styles.errorText, { color: currentTheme.danger }]}>⚠️ {errorMessage}</Text>
             </View>
           )}
 
           {/* Submit Button */}
           <TouchableOpacity
-            style={[styles.submitBtn, isLoading && styles.btnDisabled]}
+            style={[
+              styles.submitBtn,
+              { backgroundColor: currentTheme.accent },
+              isLoading && styles.btnDisabled,
+            ]}
             onPress={handleSubmit}
             disabled={isLoading}
             activeOpacity={0.8}
           >
             {isLoading ? (
-              <ActivityIndicator color="#0E1017" />
+              <ActivityIndicator color={btnTextColor} />
             ) : (
-              <Text style={styles.submitBtnText}>
+              <Text style={[styles.submitBtnText, { color: btnTextColor }]}>
                 {isSignUp ? 'Criar Minha Conta' : 'Entrar na Minha Conta'}
               </Text>
             )}
@@ -162,7 +204,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               setErrorMessage(null);
             }}
           >
-            <Text style={styles.switchModeText}>
+            <Text style={[styles.switchModeText, { color: currentTheme.textSecondary }]}>
               {isSignUp
                 ? 'Já possui uma conta? Entrar agora'
                 : 'Novo no BeatSync? Cadastre-se gratuitamente'}
@@ -185,10 +227,8 @@ const styles = StyleSheet.create({
   card: {
     width: '100%',
     maxWidth: 440,
-    backgroundColor: '#151824',
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#262D42',
     padding: 24,
   },
   header: {
@@ -198,12 +238,10 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   headerTitle: {
-    color: '#00E5FF',
     fontSize: 19,
     fontWeight: '800',
   },
   headerSubtitle: {
-    color: '#8A96BA',
     fontSize: 12,
     marginTop: 4,
   },
@@ -211,43 +249,34 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   closeText: {
-    color: '#8A96BA',
     fontSize: 18,
   },
   inputGroup: {
     marginBottom: 12,
   },
   label: {
-    color: '#B0BAD6',
     fontSize: 12,
     fontWeight: '600',
     marginBottom: 6,
   },
   input: {
-    backgroundColor: '#0E1018',
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#2A324A',
     paddingHorizontal: 12,
     paddingVertical: 10,
-    color: '#FFFFFF',
     fontSize: 13,
   },
   errorBox: {
-    backgroundColor: '#351114',
     borderWidth: 1,
-    borderColor: '#FF5252',
     borderRadius: 8,
     padding: 10,
     marginBottom: 12,
   },
   errorText: {
-    color: '#FF8A80',
     fontSize: 12,
     fontWeight: '600',
   },
   submitBtn: {
-    backgroundColor: '#00E5FF',
     borderRadius: 12,
     paddingVertical: 13,
     alignItems: 'center',
@@ -257,7 +286,6 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   submitBtnText: {
-    color: '#0E1017',
     fontWeight: '800',
     fontSize: 14,
   },
@@ -267,7 +295,6 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   switchModeText: {
-    color: '#8A96BA',
     fontSize: 12,
     textDecorationLine: 'underline',
   },

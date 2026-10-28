@@ -14,6 +14,7 @@ import {
 import { Song } from '../types';
 import { CloudLibraryService, SongShareRow } from '../supabase/cloudLibrary';
 import { AuthService } from '../supabase/supabaseClient';
+import { useTheme } from '../theme/ThemeContext';
 
 interface ShareSongModalProps {
   visible: boolean;
@@ -26,6 +27,7 @@ export const ShareSongModal: React.FC<ShareSongModalProps> = ({
   song,
   onClose,
 }) => {
+  const { currentTheme } = useTheme();
   const [email, setEmail] = useState('');
   const [canEdit, setCanEdit] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -35,7 +37,8 @@ export const ShareSongModal: React.FC<ShareSongModalProps> = ({
   const loadShares = async () => {
     if (!song) return;
     try {
-      const list = await CloudLibraryService.getSharesForSong(song.id);
+      const targetId = song.cloudId || song.id;
+      const list = await CloudLibraryService.getSharesForSong(targetId);
       setShares(list);
     } catch {
       // Ignore if not synced yet
@@ -106,33 +109,50 @@ export const ShareSongModal: React.FC<ShareSongModalProps> = ({
 
   if (!song) return null;
 
+  const btnTextColor = currentTheme.isDark ? '#000000' : '#FFFFFF';
+
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.overlay}>
-        <View style={styles.card}>
+        <View
+          style={[
+            styles.card,
+            { backgroundColor: currentTheme.card, borderColor: currentTheme.border },
+          ]}
+        >
           {/* Header */}
           <View style={styles.header}>
-            <View>
-              <Text style={styles.headerTitle}>🔗 Compartilhar Música</Text>
-              <Text style={styles.songTitle} numberOfLines={1}>
-                {song.title} <Text style={styles.artistName}>({song.artist})</Text>
+            <View style={{ flex: 1, marginRight: 8 }}>
+              <Text style={[styles.headerTitle, { color: currentTheme.accent }]}>🔗 Compartilhar Música</Text>
+              <Text style={[styles.songTitle, { color: currentTheme.text }]} numberOfLines={1}>
+                {song.title}{' '}
+                <Text style={[styles.artistName, { color: currentTheme.textSecondary }]}>
+                  ({song.artist})
+                </Text>
               </Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-              <Text style={styles.closeText}>✕</Text>
+              <Text style={[styles.closeText, { color: currentTheme.textSecondary }]}>✕</Text>
             </TouchableOpacity>
           </View>
 
           {/* Form */}
-          <Text style={styles.instruction}>
+          <Text style={[styles.instruction, { color: currentTheme.textSecondary }]}>
             Compartilhe esta faixa com colegas de banda ou equipe de louvor:
           </Text>
 
           <View style={styles.inputRow}>
             <TextInput
-              style={styles.input}
+              style={[
+                styles.input,
+                {
+                  backgroundColor: currentTheme.cardElevated,
+                  borderColor: currentTheme.border,
+                  color: currentTheme.text,
+                },
+              ]}
               placeholder="E-mail do músico (ex: batera@beatsync.com)"
-              placeholderTextColor="#687394"
+              placeholderTextColor={currentTheme.textMuted}
               value={email}
               onChangeText={setEmail}
               autoCapitalize="none"
@@ -146,23 +166,40 @@ export const ShareSongModal: React.FC<ShareSongModalProps> = ({
             activeOpacity={0.8}
             onPress={() => setCanEdit(!canEdit)}
           >
-            <View style={[styles.checkbox, canEdit && styles.checkboxActive]}>
-              <Text style={styles.checkMark}>{canEdit ? '✓' : ''}</Text>
+            <View
+              style={[
+                styles.checkbox,
+                { borderColor: currentTheme.border },
+                canEdit && {
+                  backgroundColor: currentTheme.accent,
+                  borderColor: currentTheme.accent,
+                },
+              ]}
+            >
+              <Text style={[styles.checkMark, { color: btnTextColor }]}>{canEdit ? '✓' : ''}</Text>
             </View>
-            <Text style={styles.permText}>Permitir que este usuário edite o BPM e notas</Text>
+            <Text style={[styles.permText, { color: currentTheme.textSecondary }]}>
+              Permitir que este usuário edite o BPM e notas
+            </Text>
           </TouchableOpacity>
 
           {/* Action button */}
           <TouchableOpacity
-            style={[styles.shareBtn, isLoading && styles.btnDisabled]}
+            style={[
+              styles.shareBtn,
+              { backgroundColor: currentTheme.accent },
+              isLoading && styles.btnDisabled,
+            ]}
             onPress={handleShare}
             disabled={isLoading}
             activeOpacity={0.8}
           >
             {isLoading ? (
-              <ActivityIndicator color="#0E1017" />
+              <ActivityIndicator color={btnTextColor} />
             ) : (
-              <Text style={styles.shareBtnText}>Enviar Compartilhamento</Text>
+              <Text style={[styles.shareBtnText, { color: btnTextColor }]}>
+                Enviar Compartilhamento
+              </Text>
             )}
           </TouchableOpacity>
 
@@ -171,13 +208,21 @@ export const ShareSongModal: React.FC<ShareSongModalProps> = ({
             <View
               style={[
                 styles.statusBox,
-                statusMessage.isError ? styles.statusError : styles.statusSuccess,
+                statusMessage.isError
+                  ? {
+                      backgroundColor: currentTheme.isDark ? '#381215' : '#FEE2E2',
+                      borderColor: currentTheme.danger,
+                    }
+                  : {
+                      backgroundColor: currentTheme.isDark ? '#062E1E' : '#DCFCE7',
+                      borderColor: currentTheme.success,
+                    },
               ]}
             >
               <Text
                 style={[
                   styles.statusText,
-                  statusMessage.isError ? styles.statusTextError : styles.statusTextSuccess,
+                  { color: statusMessage.isError ? currentTheme.danger : currentTheme.success },
                 ]}
               >
                 {statusMessage.text}
@@ -186,28 +231,40 @@ export const ShareSongModal: React.FC<ShareSongModalProps> = ({
           )}
 
           {/* Existing shares */}
-          <View style={styles.sharesListSection}>
-            <Text style={styles.sharesListTitle}>Usuários com acesso:</Text>
+          <View style={[styles.sharesListSection, { borderTopColor: currentTheme.border }]}>
+            <Text style={[styles.sharesListTitle, { color: currentTheme.textSecondary }]}>
+              Usuários com acesso:
+            </Text>
             {shares.length === 0 ? (
-              <Text style={styles.emptyShares}>Nenhum compartilhamento ativo no momento.</Text>
+              <Text style={[styles.emptyShares, { color: currentTheme.textMuted }]}>
+                Nenhum compartilhamento ativo no momento.
+              </Text>
             ) : (
               <FlatList
                 data={shares}
                 keyExtractor={(item) => item.id}
                 style={{ maxHeight: 130 }}
                 renderItem={({ item }) => (
-                  <View style={styles.shareItem}>
+                  <View style={[styles.shareItem, { borderBottomColor: currentTheme.border }]}>
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.shareItemEmail}>{item.shared_with_email}</Text>
-                      <Text style={styles.shareItemPerm}>
+                      <Text style={[styles.shareItemEmail, { color: currentTheme.text }]}>
+                        {item.shared_with_email}
+                      </Text>
+                      <Text style={[styles.shareItemPerm, { color: currentTheme.textSecondary }]}>
                         {item.can_edit ? 'Pode editar' : 'Apenas visualização'}
                       </Text>
                     </View>
                     <TouchableOpacity
                       onPress={() => handleRevoke(item.id, item.shared_with_email)}
-                      style={styles.revokeBtn}
+                      style={[
+                        styles.revokeBtn,
+                        {
+                          backgroundColor: currentTheme.isDark ? '#2A171B' : '#FEE2E2',
+                          borderColor: currentTheme.danger,
+                        },
+                      ]}
                     >
-                      <Text style={styles.revokeBtnText}>Revogar</Text>
+                      <Text style={[styles.revokeBtnText, { color: currentTheme.danger }]}>Revogar</Text>
                     </TouchableOpacity>
                   </View>
                 )}
@@ -231,10 +288,8 @@ const styles = StyleSheet.create({
   card: {
     width: '100%',
     maxWidth: 480,
-    backgroundColor: '#161926',
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#262D42',
     padding: 20,
   },
   header: {
@@ -244,28 +299,22 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   headerTitle: {
-    color: '#00E5FF',
     fontSize: 18,
     fontWeight: '800',
   },
   songTitle: {
-    color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '600',
     marginTop: 2,
   },
-  artistName: {
-    color: '#8A96BA',
-  },
+  artistName: {},
   closeBtn: {
     padding: 4,
   },
   closeText: {
-    color: '#8A96BA',
     fontSize: 18,
   },
   instruction: {
-    color: '#8A96BA',
     fontSize: 12,
     marginBottom: 12,
   },
@@ -273,13 +322,10 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   input: {
-    backgroundColor: '#0F121C',
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#2B334B',
     paddingHorizontal: 12,
     paddingVertical: 10,
-    color: '#FFFFFF',
     fontSize: 13,
   },
   permRow: {
@@ -292,26 +338,18 @@ const styles = StyleSheet.create({
     height: 20,
     borderRadius: 6,
     borderWidth: 1.5,
-    borderColor: '#4A5578',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 8,
   },
-  checkboxActive: {
-    backgroundColor: '#00E5FF',
-    borderColor: '#00E5FF',
-  },
   checkMark: {
-    color: '#0E1017',
     fontSize: 12,
     fontWeight: '900',
   },
   permText: {
-    color: '#B2BBD4',
     fontSize: 12,
   },
   shareBtn: {
-    backgroundColor: '#00E5FF',
     paddingVertical: 12,
     borderRadius: 10,
     alignItems: 'center',
@@ -320,7 +358,6 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   shareBtnText: {
-    color: '#0E1017',
     fontWeight: '800',
     fontSize: 13,
   },
@@ -328,42 +365,24 @@ const styles = StyleSheet.create({
     marginTop: 10,
     padding: 10,
     borderRadius: 8,
-  },
-  statusSuccess: {
-    backgroundColor: '#062E1E',
     borderWidth: 1,
-    borderColor: '#00E676',
-  },
-  statusError: {
-    backgroundColor: '#381215',
-    borderWidth: 1,
-    borderColor: '#FF5252',
   },
   statusText: {
     fontSize: 12,
     fontWeight: '600',
   },
-  statusTextSuccess: {
-    color: '#69F0AE',
-  },
-  statusTextError: {
-    color: '#FF8A80',
-  },
   sharesListSection: {
     marginTop: 16,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: '#262D42',
   },
   sharesListTitle: {
-    color: '#7682A4',
     fontSize: 11,
     fontWeight: '700',
     textTransform: 'uppercase',
     marginBottom: 8,
   },
   emptyShares: {
-    color: '#535C77',
     fontSize: 11,
     fontStyle: 'italic',
   },
@@ -373,25 +392,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 6,
     borderBottomWidth: 1,
-    borderBottomColor: '#1C2133',
   },
   shareItemEmail: {
-    color: '#FFFFFF',
     fontSize: 12,
     fontWeight: '600',
   },
   shareItemPerm: {
-    color: '#7682A4',
     fontSize: 10,
   },
   revokeBtn: {
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
-    backgroundColor: '#2A171B',
+    borderWidth: 1,
   },
   revokeBtnText: {
-    color: '#FF5252',
     fontSize: 10,
     fontWeight: '700',
   },

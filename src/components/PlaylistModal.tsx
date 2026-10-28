@@ -10,6 +10,7 @@ import {
   Platform,
 } from 'react-native';
 import { Playlist } from '../types';
+import { useTheme } from '../theme/ThemeContext';
 
 interface PlaylistModalProps {
   visible: boolean;
@@ -24,6 +25,7 @@ export const PlaylistModal: React.FC<PlaylistModalProps> = ({
   onClose,
   onSave,
 }) => {
+  const { currentTheme } = useTheme();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [error, setError] = useState('');
@@ -57,43 +59,65 @@ export const PlaylistModal: React.FC<PlaylistModalProps> = ({
     onClose();
   };
 
+  const btnTextColor = currentTheme.isDark ? '#000000' : '#FFFFFF';
+
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.overlay}
       >
-        <View style={styles.modalContent}>
-          <View style={styles.header}>
-            <Text style={styles.title}>
+        <View
+          style={[
+            styles.modalContent,
+            { backgroundColor: currentTheme.card, borderColor: currentTheme.border },
+          ]}
+        >
+          <View style={[styles.header, { borderBottomColor: currentTheme.border }]}>
+            <Text style={[styles.title, { color: currentTheme.text }]}>
               {playlistToEdit ? 'Editar Playlist' : 'Nova Playlist / Setlist'}
             </Text>
             <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-              <Text style={styles.closeBtn}>✕</Text>
+              <Text style={[styles.closeBtn, { color: currentTheme.textSecondary }]}>✕</Text>
             </TouchableOpacity>
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Nome da Playlist *</Text>
+            <Text style={[styles.label, { color: currentTheme.textSecondary }]}>Nome da Playlist *</Text>
             <TextInput
-              style={[styles.input, !!error && styles.inputError]}
+              style={[
+                styles.input,
+                {
+                  backgroundColor: currentTheme.cardElevated,
+                  borderColor: error ? currentTheme.danger : currentTheme.border,
+                  color: currentTheme.text,
+                },
+              ]}
               placeholder="Ex: Show Sábado no Bar, Ensaio Rock, Estudos..."
-              placeholderTextColor="#636B84"
+              placeholderTextColor={currentTheme.textMuted}
               value={name}
               onChangeText={(val) => {
                 setName(val);
                 if (error) setError('');
               }}
             />
-            {!!error && <Text style={styles.errorText}>{error}</Text>}
+            {!!error && <Text style={[styles.errorText, { color: currentTheme.danger }]}>{error}</Text>}
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Descrição / Anotações</Text>
+            <Text style={[styles.label, { color: currentTheme.textSecondary }]}>Descrição / Anotações</Text>
             <TextInput
-              style={[styles.input, styles.textArea]}
+              style={[
+                styles.input,
+                styles.textArea,
+                {
+                  backgroundColor: currentTheme.cardElevated,
+                  borderColor: currentTheme.border,
+                  color: currentTheme.text,
+                },
+              ]}
               placeholder="Ex: Repertório acústico para barzinho, afinação padrão..."
-              placeholderTextColor="#636B84"
+              placeholderTextColor={currentTheme.textMuted}
               multiline
               numberOfLines={3}
               value={description}
@@ -104,9 +128,9 @@ export const PlaylistModal: React.FC<PlaylistModalProps> = ({
           <TouchableOpacity
             activeOpacity={0.8}
             onPress={handleSave}
-            style={styles.saveBtn}
+            style={[styles.saveBtn, { backgroundColor: currentTheme.accent }]}
           >
-            <Text style={styles.saveBtnText}>
+            <Text style={[styles.saveBtnText, { color: btnTextColor }]}>
               {playlistToEdit ? 'Atualizar Playlist' : 'Criar Playlist'}
             </Text>
           </TouchableOpacity>
@@ -123,7 +147,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: '#181A24',
+    borderWidth: 1,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 20,
@@ -136,15 +160,12 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#282B3C',
   },
   title: {
-    color: '#FFFFFF',
     fontSize: 18,
     fontWeight: '700',
   },
   closeBtn: {
-    color: '#8A8A9E',
     fontSize: 20,
     fontWeight: 'bold',
   },
@@ -152,7 +173,6 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   label: {
-    color: '#A0A6BF',
     fontSize: 12,
     fontWeight: '600',
     marginBottom: 6,
@@ -160,11 +180,8 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
   },
   input: {
-    backgroundColor: '#202436',
     borderWidth: 1,
-    borderColor: '#30364F',
     borderRadius: 10,
-    color: '#FFFFFF',
     paddingHorizontal: 14,
     paddingVertical: 10,
     fontSize: 15,
@@ -173,23 +190,17 @@ const styles = StyleSheet.create({
     height: 70,
     textAlignVertical: 'top',
   },
-  inputError: {
-    borderColor: '#FF5252',
-  },
   errorText: {
-    color: '#FF5252',
     fontSize: 11,
     marginTop: 4,
   },
   saveBtn: {
-    backgroundColor: '#00E5FF',
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',
     marginTop: 8,
   },
   saveBtnText: {
-    color: '#09101D',
     fontSize: 15,
     fontWeight: '800',
   },

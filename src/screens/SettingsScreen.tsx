@@ -73,7 +73,9 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
       const localSongs = await StorageService.getSongs();
       let count = 0;
       for (const song of localSongs) {
-        await CloudLibraryService.uploadSongToCloud(song, Boolean(song.isPublic));
+        const uploaded = await CloudLibraryService.uploadSongToCloud(song, Boolean(song.isPublic));
+        // Persist the cloud UUID locally so future syncs update instead of duplicating rows
+        await StorageService.saveSong({ ...song, cloudId: uploaded.id, userId: uploaded.userId });
         count++;
       }
       setSyncStatus(`✅ ${count} músicas sincronizadas com sua conta no Supabase!`);
@@ -163,7 +165,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
             onPress={onOpenAdmin}
             style={[styles.primaryBtn, { backgroundColor: currentTheme.accent }]}
           >
-            <Text style={styles.primaryBtnText}>Abrir Gestão de Convites & Usuários</Text>
+            <Text style={[styles.primaryBtnText, { color: currentTheme.isDark ? '#000000' : '#FFFFFF' }]}>Abrir Gestão de Convites & Usuários</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -176,7 +178,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
           <View>
             <View style={styles.userInfoRow}>
               <View style={[styles.userAvatar, { backgroundColor: currentTheme.accent }]}>
-                <Text style={styles.userAvatarText}>
+                <Text style={[styles.userAvatarText, { color: currentTheme.isDark ? '#000000' : '#FFFFFF' }]}>
                   {(currentUser.email || 'M').charAt(0).toUpperCase()}
                 </Text>
               </View>
@@ -197,7 +199,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 {isSyncing ? (
                   <ActivityIndicator color="#000" size="small" />
                 ) : (
-                  <Text style={styles.syncBtnText}>☁️ Sincronizar Músicas na Nuvem</Text>
+                  <Text style={[styles.syncBtnText, { color: currentTheme.isDark ? '#000000' : '#FFFFFF' }]}>☁️ Sincronizar Músicas na Nuvem</Text>
                 )}
               </TouchableOpacity>
 
@@ -243,7 +245,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               onPress={() => setIsAuthModalVisible(true)}
               style={[styles.loginBtn, { backgroundColor: currentTheme.accent }]}
             >
-              <Text style={styles.loginBtnText}>Entrar ou Criar Conta com E-mail</Text>
+              <Text style={[styles.loginBtnText, { color: currentTheme.isDark ? '#000000' : '#FFFFFF' }]}>Entrar ou Criar Conta com E-mail</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -349,19 +351,19 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
         <Text style={[styles.cardHeader, { color: currentTheme.accent }]}>
           ⚡ PUBLICAÇÃO & HOSPEDAGEM
         </Text>
-        <View style={styles.infoRow}>
+        <View style={[styles.infoRow, { borderBottomColor: currentTheme.border }]}>
           <Text style={[styles.infoLabel, { color: currentTheme.textSecondary }]}>Hospedagem PWA:</Text>
           <Text style={[styles.infoValue, { color: currentTheme.accent }]}>Cloudflare Pages</Text>
         </View>
-        <View style={styles.infoRow}>
+        <View style={[styles.infoRow, { borderBottomColor: currentTheme.border }]}>
           <Text style={[styles.infoLabel, { color: currentTheme.textSecondary }]}>Subdomínio Ativo:</Text>
           <Text style={[styles.infoValue, { color: currentTheme.text }]}>beatsync-75q.pages.dev</Text>
         </View>
-        <View style={styles.infoRow}>
+        <View style={[styles.infoRow, { borderBottomColor: currentTheme.border }]}>
           <Text style={[styles.infoLabel, { color: currentTheme.textSecondary }]}>Banco & Autenticação:</Text>
           <Text style={[styles.infoValue, { color: currentTheme.success }]}>Supabase PostgreSQL (RLS Ativo)</Text>
         </View>
-        <View style={styles.infoRow}>
+        <View style={[styles.infoRow, { borderBottomColor: currentTheme.border }]}>
           <Text style={[styles.infoLabel, { color: currentTheme.textSecondary }]}>Prevenção de Bloqueio:</Text>
           <Text style={[styles.infoValue, { color: currentTheme.text }]}>Screen Wake Lock Ativo no Player</Text>
         </View>
@@ -402,7 +404,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
           onPress={handleExportBackup}
           style={[styles.primaryBtn, { backgroundColor: currentTheme.accent }]}
         >
-          <Text style={styles.primaryBtnText}>Gerar Backup JSON</Text>
+          <Text style={[styles.primaryBtnText, { color: currentTheme.isDark ? '#000000' : '#FFFFFF' }]}>Gerar Backup JSON</Text>
         </TouchableOpacity>
 
         {backupStatus && (

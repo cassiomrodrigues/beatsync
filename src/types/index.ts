@@ -23,6 +23,7 @@ export interface Song {
   soundType?: SoundType;
   accentPattern?: BeatState[];
   isPublic?: boolean;          // Public in Global Library
+  cloudId?: string;            // Supabase row UUID (songs.id) once synced to the cloud
   userId?: string;             // Owner user ID in Supabase
   isShared?: boolean;          // If shared with current user
   sharedBy?: string;           // Email or ID of sharer

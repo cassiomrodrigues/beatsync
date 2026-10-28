@@ -8,6 +8,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { Song, Playlist } from '../types';
+import { useTheme } from '../theme/ThemeContext';
 
 interface AddToPlaylistModalProps {
   visible: boolean;
@@ -26,27 +27,36 @@ export const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
   onSelectPlaylist,
   onCreateNewPlaylist,
 }) => {
+  const { currentTheme } = useTheme();
+
   if (!song) return null;
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={styles.overlay}>
-        <View style={styles.modalContent}>
-          <View style={styles.header}>
+        <View
+          style={[
+            styles.modalContent,
+            { backgroundColor: currentTheme.card, borderColor: currentTheme.border },
+          ]}
+        >
+          <View style={[styles.header, { borderBottomColor: currentTheme.border }]}>
             <View>
-              <Text style={styles.title}>Adicionar à Playlist</Text>
-              <Text style={styles.songSub}>
+              <Text style={[styles.title, { color: currentTheme.text }]}>Adicionar à Playlist</Text>
+              <Text style={[styles.songSub, { color: currentTheme.accent }]}>
                 {song.title} • {song.artist} ({song.bpm} BPM)
               </Text>
             </View>
             <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-              <Text style={styles.closeBtn}>✕</Text>
+              <Text style={[styles.closeBtn, { color: currentTheme.textSecondary }]}>✕</Text>
             </TouchableOpacity>
           </View>
 
           <ScrollView style={styles.list} showsVerticalScrollIndicator={false}>
             {playlists.length === 0 ? (
-              <Text style={styles.emptyText}>Nenhuma playlist criada ainda.</Text>
+              <Text style={[styles.emptyText, { color: currentTheme.textMuted }]}>
+                Nenhuma playlist criada ainda.
+              </Text>
             ) : (
               playlists.map((pl) => {
                 const alreadyHasSong = pl.songIds.includes(song.id);
@@ -60,22 +70,28 @@ export const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
                     }}
                     style={[
                       styles.playlistItem,
+                      { backgroundColor: currentTheme.cardElevated, borderColor: currentTheme.border },
                       alreadyHasSong && styles.playlistItemDisabled,
                     ]}
                   >
-                    <View style={styles.iconCircle}>
+                    <View
+                      style={[
+                        styles.iconCircle,
+                        { backgroundColor: currentTheme.card, borderColor: currentTheme.border },
+                      ]}
+                    >
                       <Text style={styles.iconText}>🎵</Text>
                     </View>
                     <View style={styles.infoCol}>
-                      <Text style={styles.playlistName}>{pl.name}</Text>
-                      <Text style={styles.playlistCount}>
+                      <Text style={[styles.playlistName, { color: currentTheme.text }]}>{pl.name}</Text>
+                      <Text style={[styles.playlistCount, { color: currentTheme.textSecondary }]}>
                         {pl.songIds.length} {pl.songIds.length === 1 ? 'música' : 'músicas'}
                       </Text>
                     </View>
                     {alreadyHasSong ? (
-                      <Text style={styles.alreadyBadge}>Já adicionada</Text>
+                      <Text style={[styles.alreadyBadge, { color: currentTheme.success }]}>Já adicionada</Text>
                     ) : (
-                      <Text style={styles.addBtnText}>+ Adicionar</Text>
+                      <Text style={[styles.addBtnText, { color: currentTheme.accent }]}>+ Adicionar</Text>
                     )}
                   </TouchableOpacity>
                 );
@@ -88,9 +104,11 @@ export const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({
                 onClose();
                 onCreateNewPlaylist();
               }}
-              style={styles.newPlaylistBtn}
+              style={[styles.newPlaylistBtn, { borderColor: currentTheme.border }]}
             >
-              <Text style={styles.newPlaylistBtnText}>+ Criar Nova Playlist</Text>
+              <Text style={[styles.newPlaylistBtnText, { color: currentTheme.accent }]}>
+                + Criar Nova Playlist
+              </Text>
             </TouchableOpacity>
           </ScrollView>
         </View>
@@ -106,7 +124,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: '#181A24',
+    borderWidth: 1,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 20,
@@ -119,21 +137,17 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#282B3C',
   },
   title: {
-    color: '#FFFFFF',
     fontSize: 18,
     fontWeight: '700',
   },
   songSub: {
-    color: '#00E5FF',
     fontSize: 13,
     fontWeight: '500',
     marginTop: 2,
   },
   closeBtn: {
-    color: '#8A8A9E',
     fontSize: 20,
     fontWeight: 'bold',
   },
@@ -141,15 +155,12 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   emptyText: {
-    color: '#707897',
     textAlign: 'center',
     marginVertical: 20,
     fontSize: 14,
   },
   playlistItem: {
-    backgroundColor: '#202436',
     borderWidth: 1,
-    borderColor: '#30364F',
     borderRadius: 12,
     padding: 12,
     flexDirection: 'row',
@@ -163,7 +174,7 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: '#161926',
+    borderWidth: 1,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -175,28 +186,23 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   playlistName: {
-    color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '700',
   },
   playlistCount: {
-    color: '#8A92B2',
     fontSize: 12,
     marginTop: 2,
   },
   alreadyBadge: {
-    color: '#00E676',
     fontSize: 12,
     fontWeight: '600',
   },
   addBtnText: {
-    color: '#00E5FF',
     fontSize: 13,
     fontWeight: '700',
   },
   newPlaylistBtn: {
     borderWidth: 1.5,
-    borderColor: '#3D4566',
     borderStyle: 'dashed',
     borderRadius: 12,
     paddingVertical: 14,
@@ -205,7 +211,6 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   newPlaylistBtnText: {
-    color: '#00E5FF',
     fontSize: 14,
     fontWeight: '700',
   },

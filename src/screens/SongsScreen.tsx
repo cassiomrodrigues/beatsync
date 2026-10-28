@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   Alert,
   Platform,
   ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { Song, Playlist } from '../types';
 import { SongModal } from '../components/SongModal';
@@ -49,11 +50,48 @@ export const SongsScreen: React.FC<SongsScreenProps> = ({
   const [playlistModalSong, setPlaylistModalSong] = useState<Song | null>(null);
   const [shareModalSong, setShareModalSong] = useState<Song | null>(null);
 
-  // Cloud state
+  // Cloud state (per-tab loading/error so concurrent fetches don't clobber each other)
   const [globalSongs, setGlobalSongs] = useState<Song[]>([]);
   const [sharedSongs, setSharedSongs] = useState<Song[]>([]);
-  const [isLoadingCloud, setIsLoadingCloud] = useState(false);
+  const [isLoadingGlobal, setIsLoadingGlobal] = useState(false);
+  const [isLoadingShared, setIsLoadingShared] = useState(false);
+  const [globalError, setGlobalError] = useState<string | null>(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const globalRequestIdRef = useRef(0);
+
+  const loadGlobalSongs = useCallback(async () => {
+    const requestId = ++globalRequestIdRef.current;
+    setIsLoadingGlobal(true);
+    setGlobalError(null);
+    try {
+      const list = await CloudLibraryService.fetchGlobalSongs();
+      // Ignore stale responses from superseded requests
+      if (requestId === globalRequestIdRef.current) {
+        setGlobalSongs(list);
+      }
+    } catch (e: unknown) {
+      console.warn('Erro ao carregar músicas globais:', e);
+      if (requestId === globalRequestIdRef.current) {
+        setGlobalError('Não foi possível carregar a Biblioteca Global. Verifique sua conexão e tente novamente.');
+      }
+    } finally {
+      if (requestId === globalRequestIdRef.current) {
+        setIsLoadingGlobal(false);
+      }
+    }
+  }, []);
+
+  const loadSharedSongs = useCallback(async () => {
+    setIsLoadingShared(true);
+    try {
+      const list = await CloudLibraryService.fetchSharedWithMe();
+      setSharedSongs(list);
+    } catch (e: unknown) {
+      console.warn('Erro ao carregar compartilhadas:', e);
+    } finally {
+      setIsLoadingShared(false);
+    }
+  }, []);
 
   useEffect(() => {
     AuthService.getCurrentUser().then((user) => {
@@ -72,31 +110,7 @@ export const SongsScreen: React.FC<SongsScreenProps> = ({
     return () => {
       sub?.unsubscribe();
     };
-  }, []);
-
-  const loadGlobalSongs = async () => {
-    setIsLoadingCloud(true);
-    try {
-      const list = await CloudLibraryService.fetchGlobalSongs();
-      setGlobalSongs(list);
-    } catch (e: any) {
-      console.warn('Erro ao carregar músicas globais:', e);
-    } finally {
-      setIsLoadingCloud(false);
-    }
-  };
-
-  const loadSharedSongs = async () => {
-    setIsLoadingCloud(true);
-    try {
-      const list = await CloudLibraryService.fetchSharedWithMe();
-      setSharedSongs(list);
-    } catch (e: any) {
-      console.warn('Erro ao carregar compartilhadas:', e);
-    } finally {
-      setIsLoadingCloud(false);
-    }
-  };
+  }, [loadSharedSongs]);
 
   useEffect(() => {
     if (activeTab === 'global') {
@@ -104,7 +118,10 @@ export const SongsScreen: React.FC<SongsScreenProps> = ({
     } else if (activeTab === 'shared') {
       loadSharedSongs();
     }
-  }, [activeTab]);
+  }, [activeTab, loadGlobalSongs, loadSharedSongs]);
+
+  const isLoadingCloud =
+    (activeTab === 'global' && isLoadingGlobal) || (activeTab === 'shared' && isLoadingShared);
 
   // Determine active song source
   const currentList = useMemo(() => {
@@ -170,6 +187,10 @@ export const SongsScreen: React.FC<SongsScreenProps> = ({
       createdAt: Date.now(),
       isPublic: false,
       isShared: false,
+      // Imported copy is a new, unsynced song owned by the current user
+      cloudId: undefined,
+      userId: undefined,
+      sharedBy: undefined,
     };
     onSaveSong(importedSong);
     alert(`"${song.title}" foi importada com sucesso para o seu repertório pessoal!`);
@@ -177,13 +198,28 @@ export const SongsScreen: React.FC<SongsScreenProps> = ({
 
   const handleSaveSongWithCloud = async (song: Song) => {
     onSaveSong(song);
-    // If user is logged in, sync to Supabase cloud
-    if (isLoggedIn) {
-      try {
-        await CloudLibraryService.uploadSongToCloud(song, Boolean(song.isPublic));
-      } catch (e: any) {
-        console.warn('Erro ao sincronizar música na nuvem:', e.message);
+
+    if (!isLoggedIn) {
+      // Publishing requires a Supabase session; without it the song would silently stay local
+      if (song.isPublic) {
+        alert(
+          'Música salva apenas neste dispositivo. Para publicá-la na Biblioteca Global, conecte sua conta na nuvem em Configurações e toque em "Sincronizar".'
+        );
       }
+      return;
+    }
+
+    try {
+      const uploaded = await CloudLibraryService.uploadSongToCloud(song, Boolean(song.isPublic));
+      // Persist the cloud UUID locally so future edits update the same row
+      if (uploaded.cloudId !== song.cloudId) {
+        onSaveSong({ ...song, cloudId: uploaded.cloudId, userId: uploaded.userId });
+      }
+      // Visibility may have changed: refresh the global listing
+      loadGlobalSongs();
+    } catch (e: unknown) {
+      console.warn('Erro ao sincronizar música na nuvem:', e);
+      alert('A música foi salva no dispositivo, mas não foi possível sincronizá-la com a nuvem. Tente novamente mais tarde.');
     }
   };
 
@@ -201,6 +237,7 @@ export const SongsScreen: React.FC<SongsScreenProps> = ({
           <Text
             style={[
               styles.subTabText,
+              { color: currentTheme.textSecondary },
               activeTab === 'my_songs' && [styles.subTabTextActive, { color: currentTheme.accent }],
             ]}
           >
@@ -218,6 +255,7 @@ export const SongsScreen: React.FC<SongsScreenProps> = ({
           <Text
             style={[
               styles.subTabText,
+              { color: currentTheme.textSecondary },
               activeTab === 'global' && [styles.subTabTextActive, { color: currentTheme.accent }],
             ]}
           >
@@ -235,6 +273,7 @@ export const SongsScreen: React.FC<SongsScreenProps> = ({
           <Text
             style={[
               styles.subTabText,
+              { color: currentTheme.textSecondary },
               activeTab === 'shared' && [styles.subTabTextActive, { color: currentTheme.accent }],
             ]}
           >
@@ -275,7 +314,7 @@ export const SongsScreen: React.FC<SongsScreenProps> = ({
             style={[
               styles.sortChip,
               { backgroundColor: currentTheme.cardElevated, borderColor: currentTheme.border },
-              sortOption === 'recent' && { borderColor: currentTheme.accent, backgroundColor: currentTheme.isOled ? '#151515' : '#11354A' },
+              sortOption === 'recent' && { borderColor: currentTheme.accent, backgroundColor: currentTheme.isOled ? '#000000' : currentTheme.navActive },
             ]}
           >
             <Text
@@ -293,7 +332,7 @@ export const SongsScreen: React.FC<SongsScreenProps> = ({
             style={[
               styles.sortChip,
               { backgroundColor: currentTheme.cardElevated, borderColor: currentTheme.border },
-              sortOption === 'title' && { borderColor: currentTheme.accent, backgroundColor: currentTheme.isOled ? '#151515' : '#11354A' },
+              sortOption === 'title' && { borderColor: currentTheme.accent, backgroundColor: currentTheme.isOled ? '#000000' : currentTheme.navActive },
             ]}
           >
             <Text
@@ -311,7 +350,7 @@ export const SongsScreen: React.FC<SongsScreenProps> = ({
             style={[
               styles.sortChip,
               { backgroundColor: currentTheme.cardElevated, borderColor: currentTheme.border },
-              sortOption === 'artist' && { borderColor: currentTheme.accent, backgroundColor: currentTheme.isOled ? '#151515' : '#11354A' },
+              sortOption === 'artist' && { borderColor: currentTheme.accent, backgroundColor: currentTheme.isOled ? '#000000' : currentTheme.navActive },
             ]}
           >
             <Text
@@ -329,7 +368,7 @@ export const SongsScreen: React.FC<SongsScreenProps> = ({
             style={[
               styles.sortChip,
               { backgroundColor: currentTheme.cardElevated, borderColor: currentTheme.border },
-              (sortOption === 'bpmAsc' || sortOption === 'bpmDesc') && { borderColor: currentTheme.accent, backgroundColor: currentTheme.isOled ? '#151515' : '#11354A' },
+              (sortOption === 'bpmAsc' || sortOption === 'bpmDesc') && { borderColor: currentTheme.accent, backgroundColor: currentTheme.isOled ? '#000000' : currentTheme.navActive },
             ]}
           >
             <Text
@@ -345,8 +384,8 @@ export const SongsScreen: React.FC<SongsScreenProps> = ({
         </View>
       </View>
 
-      {/* Loading state for cloud tabs */}
-      {isLoadingCloud ? (
+      {/* Loading state for cloud tabs (full-screen only on first load; afterwards pull-to-refresh) */}
+      {isLoadingCloud && currentList.length === 0 ? (
         <View style={styles.centerLoading}>
           <ActivityIndicator size="large" color={currentTheme.accent} />
           <Text style={[styles.loadingText, { color: currentTheme.textSecondary }]}>
@@ -360,6 +399,17 @@ export const SongsScreen: React.FC<SongsScreenProps> = ({
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            activeTab === 'my_songs' ? undefined : (
+              <RefreshControl
+                refreshing={isLoadingCloud}
+                onRefresh={activeTab === 'global' ? loadGlobalSongs : loadSharedSongs}
+                tintColor={currentTheme.accent}
+                colors={[currentTheme.accent]}
+                progressBackgroundColor={currentTheme.background}
+              />
+            )
+          }
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyEmoji}>
@@ -367,20 +417,38 @@ export const SongsScreen: React.FC<SongsScreenProps> = ({
               </Text>
               <Text style={[styles.emptyTitle, { color: currentTheme.text }]}>
                 {activeTab === 'global'
-                  ? 'Nenhuma música na Biblioteca Global'
+                  ? globalError
+                    ? 'Falha ao carregar a Biblioteca Global'
+                    : 'Nenhuma música na Biblioteca Global'
                   : activeTab === 'shared'
                   ? 'Nenhuma música compartilhada com você'
                   : searchQuery
                   ? 'Nenhuma música encontrada'
                   : 'Sua biblioteca está vazia'}
               </Text>
-              <Text style={[styles.emptyDesc, { color: currentTheme.textSecondary }]}>
+              <Text
+                style={[styles.emptyDesc, { color: activeTab === 'global' && globalError ? currentTheme.danger : currentTheme.textSecondary }]}
+                accessibilityLiveRegion={activeTab === 'global' && globalError ? 'polite' : 'none'}
+              >
                 {activeTab === 'global'
-                  ? 'Músicas marcadas como públicas por você e outros músicos aparecerão aqui!'
+                  ? globalError ??
+                    (isLoggedIn
+                      ? 'Músicas marcadas como públicas por você e outros músicos aparecerão aqui!'
+                      : 'Músicas públicas da comunidade aparecerão aqui. Para publicar as suas, conecte sua conta na nuvem em Configurações.')
                   : activeTab === 'shared'
                   ? 'Quando alguém compartilhar uma música usando seu e-mail, ela aparecerá aqui!'
                   : 'Toque no botão abaixo para adicionar sua primeira música'}
               </Text>
+              {activeTab === 'global' && globalError && (
+                <TouchableOpacity
+                  onPress={loadGlobalSongs}
+                  accessibilityRole="button"
+                  accessibilityLabel="Tentar carregar a Biblioteca Global novamente"
+                  style={[styles.retryBtn, { borderColor: currentTheme.accent }]}
+                >
+                  <Text style={[styles.retryBtnText, { color: currentTheme.accent }]}>Tentar novamente</Text>
+                </TouchableOpacity>
+              )}
             </View>
           }
           renderItem={({ item }) => (
@@ -414,7 +482,7 @@ export const SongsScreen: React.FC<SongsScreenProps> = ({
                     styles.bpmBadge,
                     {
                       borderColor: currentTheme.accent,
-                      backgroundColor: currentTheme.isOled ? '#121212' : '#11354A',
+                      backgroundColor: currentTheme.isOled ? '#000000' : currentTheme.navActive,
                     },
                   ]}
                 >
@@ -425,27 +493,27 @@ export const SongsScreen: React.FC<SongsScreenProps> = ({
 
               {/* Badges Row */}
               <View style={styles.badgesRow}>
-                <View style={[styles.badge, { backgroundColor: currentTheme.cardElevated }]}>
+                <View style={[styles.badge, { backgroundColor: currentTheme.cardElevated, borderColor: currentTheme.border }]}>
                   <Text style={[styles.badgeLabel, { color: currentTheme.textSecondary }]}>Compasso:</Text>
                   <Text style={[styles.badgeValue, { color: currentTheme.text }]}>{item.timeSignature}</Text>
                 </View>
 
                 {item.key && (
-                  <View style={[styles.badge, { backgroundColor: currentTheme.cardElevated }]}>
+                  <View style={[styles.badge, { backgroundColor: currentTheme.cardElevated, borderColor: currentTheme.border }]}>
                     <Text style={[styles.badgeLabel, { color: currentTheme.textSecondary }]}>Tom:</Text>
                     <Text style={[styles.badgeValue, { color: currentTheme.success }]}>{item.key}</Text>
                   </View>
                 )}
 
                 {item.duration && (
-                  <View style={[styles.badge, { backgroundColor: currentTheme.cardElevated }]}>
+                  <View style={[styles.badge, { backgroundColor: currentTheme.cardElevated, borderColor: currentTheme.border }]}>
                     <Text style={[styles.badgeLabel, { color: currentTheme.textSecondary }]}>⏱</Text>
                     <Text style={[styles.badgeValue, { color: currentTheme.text }]}>{item.duration}</Text>
                   </View>
                 )}
 
                 {item.subdivision && item.subdivision > 1 && (
-                  <View style={[styles.badge, { backgroundColor: currentTheme.cardElevated }]}>
+                  <View style={[styles.badge, { backgroundColor: currentTheme.cardElevated, borderColor: currentTheme.border }]}>
                     <Text style={[styles.badgeLabel, { color: currentTheme.textSecondary }]}>Sub:</Text>
                     <Text style={[styles.badgeValue, { color: currentTheme.text }]}>
                       {item.subdivision === 2 ? '1/8' : item.subdivision === 3 ? '3T' : '1/16'}
@@ -469,8 +537,8 @@ export const SongsScreen: React.FC<SongsScreenProps> = ({
                   onPress={() => onSelectSongForMetronome(item)}
                   style={[styles.playBtn, { backgroundColor: currentTheme.accent }]}
                 >
-                  <Text style={[styles.playBtnIcon, { color: '#000000' }]}>▶</Text>
-                  <Text style={[styles.playBtnText, { color: '#000000' }]}>Metrônomo</Text>
+                  <Text style={[styles.playBtnIcon, { color: currentTheme.isDark ? '#000000' : '#FFFFFF' }]}>▶</Text>
+                  <Text style={[styles.playBtnText, { color: currentTheme.isDark ? '#000000' : '#FFFFFF' }]}>Metrônomo</Text>
                 </TouchableOpacity>
 
                 {/* If on global or shared tab, offer import to my library */}
@@ -515,7 +583,7 @@ export const SongsScreen: React.FC<SongsScreenProps> = ({
                     {/* Delete */}
                     <TouchableOpacity
                       onPress={() => confirmDelete(item)}
-                      style={[styles.actionIconBtn, styles.deleteBtn]}
+                      style={[styles.actionIconBtn, { backgroundColor: currentTheme.isDark ? '#351114' : '#FEE2E2', borderColor: currentTheme.danger }]}
                     >
                       <Text style={styles.deleteIconText}>🗑</Text>
                     </TouchableOpacity>
@@ -537,8 +605,8 @@ export const SongsScreen: React.FC<SongsScreenProps> = ({
           }}
           style={[styles.fab, { backgroundColor: currentTheme.accent }]}
         >
-          <Text style={[styles.fabIcon, { color: '#000000' }]}>+</Text>
-          <Text style={[styles.fabText, { color: '#000000' }]}>Nova Música</Text>
+          <Text style={[styles.fabIcon, { color: currentTheme.isDark ? '#000000' : '#FFFFFF' }]}>+</Text>
+          <Text style={[styles.fabText, { color: currentTheme.isDark ? '#000000' : '#FFFFFF' }]}>Nova Música</Text>
         </TouchableOpacity>
       )}
 
@@ -713,6 +781,7 @@ const styles = StyleSheet.create({
   badge: {
     flexDirection: 'row',
     borderRadius: 6,
+    borderWidth: 1,
     paddingVertical: 3,
     paddingHorizontal: 8,
     alignItems: 'center',
@@ -815,5 +884,19 @@ const styles = StyleSheet.create({
     fontSize: 13,
     textAlign: 'center',
     lineHeight: 18,
+  },
+  retryBtn: {
+    marginTop: 16,
+    minHeight: 44,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+  },
+  retryBtnText: {
+    fontSize: 14,
+    fontWeight: '800',
   },
 });

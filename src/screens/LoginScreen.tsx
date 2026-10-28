@@ -12,12 +12,14 @@ import {
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { AuthGuardService, AuthSession } from '../auth/authGuard';
+import { useTheme } from '../theme/ThemeContext';
 
 interface LoginScreenProps {
   onLoginSuccess: (session: AuthSession) => void;
 }
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
+  const { currentTheme } = useTheme();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -50,34 +52,64 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
     }
   };
 
+  const btnTextColor = currentTheme.isDark ? '#000000' : '#FFFFFF';
+
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar style="light" />
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: currentTheme.background }]}>
+      <StatusBar style={currentTheme.isDark ? 'light' : 'dark'} />
       <KeyboardAvoidingView
         style={styles.keyboardContainer}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <View style={styles.container}>
+        <View style={[styles.container, { backgroundColor: currentTheme.background }]}>
           {/* Minimalist Logo & Header */}
           <View style={styles.header}>
-            <View style={styles.logoBadge}>
+            <View
+              style={[
+                styles.logoBadge,
+                { backgroundColor: currentTheme.card, borderColor: currentTheme.accent },
+              ]}
+            >
               <Text style={styles.logoIcon}>⏱</Text>
             </View>
-            <Text style={styles.brandTitle}>BeatSync</Text>
-            <Text style={styles.brandSubtitle}>METRÔNOMO PROGRESSIVO PWA</Text>
-            <View style={styles.lockBadge}>
-              <Text style={styles.lockBadgeText}>🔒 ACESSO RESTRITO EM PRODUÇÃO</Text>
+            <Text style={[styles.brandTitle, { color: currentTheme.text }]}>BeatSync</Text>
+            <Text style={[styles.brandSubtitle, { color: currentTheme.accent }]}>
+              METRÔNOMO PROGRESSIVO PWA
+            </Text>
+            <View
+              style={[
+                styles.lockBadge,
+                { backgroundColor: currentTheme.card, borderColor: currentTheme.border },
+              ]}
+            >
+              <Text style={[styles.lockBadgeText, { color: currentTheme.textMuted }]}>
+                🔒 ACESSO RESTRITO EM PRODUÇÃO
+              </Text>
             </View>
           </View>
 
-          {/* Form Card (OLED Zero Luz: deep black with subtle borders) */}
-          <View style={styles.formCard}>
-            <Text style={styles.inputLabel}>E-mail Autorizado</Text>
+          {/* Form Card */}
+          <View
+            style={[
+              styles.formCard,
+              { backgroundColor: currentTheme.card, borderColor: currentTheme.border },
+            ]}
+          >
+            <Text style={[styles.inputLabel, { color: currentTheme.textSecondary }]}>
+              E-mail Autorizado
+            </Text>
             <View style={styles.inputWrapper}>
               <TextInput
-                style={styles.input}
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: currentTheme.cardElevated,
+                    borderColor: currentTheme.border,
+                    color: currentTheme.text,
+                  },
+                ]}
                 placeholder="nome@beatsync.com"
-                placeholderTextColor="#444444"
+                placeholderTextColor={currentTheme.textMuted}
                 value={email}
                 onChangeText={(t) => {
                   setEmail(t);
@@ -89,12 +121,22 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
               />
             </View>
 
-            <Text style={styles.inputLabel}>Senha de Segurança</Text>
+            <Text style={[styles.inputLabel, { color: currentTheme.textSecondary }]}>
+              Senha de Segurança
+            </Text>
             <View style={styles.inputWrapper}>
               <TextInput
-                style={[styles.input, { paddingRight: 44 }]}
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: currentTheme.cardElevated,
+                    borderColor: currentTheme.border,
+                    color: currentTheme.text,
+                    paddingRight: 44,
+                  },
+                ]}
                 placeholder="••••••••••••"
-                placeholderTextColor="#444444"
+                placeholderTextColor={currentTheme.textMuted}
                 value={password}
                 onChangeText={(t) => {
                   setPassword(t);
@@ -113,8 +155,18 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
 
             {/* Error Message */}
             {errorMessage && (
-              <View style={styles.errorBox}>
-                <Text style={styles.errorText}>⚠️ {errorMessage}</Text>
+              <View
+                style={[
+                  styles.errorBox,
+                  {
+                    backgroundColor: currentTheme.isDark ? '#1C0607' : '#FEE2E2',
+                    borderColor: currentTheme.danger,
+                  },
+                ]}
+              >
+                <Text style={[styles.errorText, { color: currentTheme.danger }]}>
+                  ⚠️ {errorMessage}
+                </Text>
               </View>
             )}
 
@@ -123,19 +175,25 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
               activeOpacity={0.8}
               onPress={handleLogin}
               disabled={isLoading}
-              style={[styles.loginBtn, isLoading && styles.loginBtnDisabled]}
+              style={[
+                styles.loginBtn,
+                { backgroundColor: currentTheme.accent },
+                isLoading && styles.loginBtnDisabled,
+              ]}
             >
               {isLoading ? (
-                <ActivityIndicator color="#000000" size="small" />
+                <ActivityIndicator color={btnTextColor} size="small" />
               ) : (
-                <Text style={styles.loginBtnText}>Entrar no BeatSync</Text>
+                <Text style={[styles.loginBtnText, { color: btnTextColor }]}>
+                  Entrar no BeatSync
+                </Text>
               )}
             </TouchableOpacity>
           </View>
 
           {/* Footer note */}
           <View style={styles.footer}>
-            <Text style={styles.footerNote}>
+            <Text style={[styles.footerNote, { color: currentTheme.textMuted }]}>
               Ambiente protegido para ensaios e palcos • Visual OLED Zero Luz
             </Text>
           </View>
@@ -148,14 +206,12 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#000000',
   },
   keyboardContainer: {
     flex: 1,
   },
   container: {
     flex: 1,
-    backgroundColor: '#000000',
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 24,
@@ -168,16 +224,10 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: '#0A0A0A',
     borderWidth: 1.5,
-    borderColor: '#00E5FF',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 16,
-    shadowColor: '#00E5FF',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.35,
-    shadowRadius: 12,
   },
   logoIcon: {
     fontSize: 28,
@@ -185,27 +235,22 @@ const styles = StyleSheet.create({
   brandTitle: {
     fontSize: 28,
     fontWeight: '900',
-    color: '#FFFFFF',
     letterSpacing: 1.5,
   },
   brandSubtitle: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#00E5FF',
     letterSpacing: 2,
     marginTop: 4,
   },
   lockBadge: {
     marginTop: 12,
-    backgroundColor: '#0D0D0D',
     borderWidth: 1,
-    borderColor: '#222222',
     paddingHorizontal: 12,
     paddingVertical: 4,
     borderRadius: 20,
   },
   lockBadgeText: {
-    color: '#777777',
     fontSize: 10,
     fontWeight: '800',
     letterSpacing: 1,
@@ -213,14 +258,11 @@ const styles = StyleSheet.create({
   formCard: {
     width: '100%',
     maxWidth: 380,
-    backgroundColor: '#070707',
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#181818',
     padding: 24,
   },
   inputLabel: {
-    color: '#888888',
     fontSize: 11,
     fontWeight: '700',
     textTransform: 'uppercase',
@@ -232,13 +274,10 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   input: {
-    backgroundColor: '#000000',
     borderWidth: 1,
-    borderColor: '#242424',
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 12,
-    color: '#FFFFFF',
     fontSize: 14,
   },
   eyeBtn: {
@@ -251,35 +290,26 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   errorBox: {
-    backgroundColor: '#1C0607',
     borderWidth: 1,
-    borderColor: '#5C1014',
     borderRadius: 8,
     padding: 10,
     marginBottom: 16,
   },
   errorText: {
-    color: '#FF6B6B',
     fontSize: 12,
     fontWeight: '600',
     textAlign: 'center',
   },
   loginBtn: {
-    backgroundColor: '#00E5FF',
     borderRadius: 10,
     paddingVertical: 14,
     alignItems: 'center',
     marginTop: 4,
-    shadowColor: '#00E5FF',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
   },
   loginBtnDisabled: {
     opacity: 0.6,
   },
   loginBtnText: {
-    color: '#000000',
     fontWeight: '900',
     fontSize: 14,
     letterSpacing: 0.5,
@@ -289,7 +319,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   footerNote: {
-    color: '#444444',
     fontSize: 11,
     textAlign: 'center',
   },

@@ -29,6 +29,20 @@ export interface SongShareRow {
   created_at: string;
 }
 
+/** Explicit projection: avoids `select('*')` over-fetching and schema drift. */
+const SONG_COLUMNS =
+  'id, user_id, title, artist, bpm, time_signature, subdivision, key, notes, duration, sound_type, accent_pattern, is_public, created_at, updated_at';
+
+const GLOBAL_LIBRARY_LIMIT = 100;
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Resolves the Supabase row id for a song (persisted cloudId, or a UUID-shaped local id). */
+function resolveCloudId(song: Song): string | undefined {
+  if (song.cloudId && UUID_PATTERN.test(song.cloudId)) return song.cloudId;
+  return UUID_PATTERN.test(song.id) ? song.id : undefined;
+}
+
 function mapRowToSong(row: CloudSongRow, isShared = false, sharedBy?: string): Song {
   return {
     id: row.id,
@@ -43,6 +57,7 @@ function mapRowToSong(row: CloudSongRow, isShared = false, sharedBy?: string): S
     soundType: (row.sound_type as SoundType) || 'woodblock',
     accentPattern: Array.isArray(row.accent_pattern) ? (row.accent_pattern as BeatState[]) : undefined,
     isPublic: row.is_public,
+    cloudId: row.id,
     userId: row.user_id,
     isShared,
     sharedBy,
@@ -76,29 +91,18 @@ export const CloudLibraryService = {
       updated_at: new Date().toISOString(),
     };
 
-    // If ID is already a UUID from supabase, update; otherwise let Supabase generate UUID
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(song.id);
+    // Reuse the persisted Supabase UUID (cloudId) so re-saves update the same row
+    // instead of inserting duplicates (e.g. when toggling public/private).
+    const cloudId = resolveCloudId(song);
 
-    let resultData: CloudSongRow;
-    if (isUuid) {
-      const { data, error } = await supabase
-        .from('songs')
-        .upsert({ id: song.id, ...payload })
-        .select()
-        .single();
-      if (error) throw error;
-      resultData = data;
-    } else {
-      const { data, error } = await supabase
-        .from('songs')
-        .insert(payload)
-        .select()
-        .single();
-      if (error) throw error;
-      resultData = data;
-    }
+    const query = cloudId
+      ? supabase.from('songs').upsert({ id: cloudId, ...payload }, { onConflict: 'id' })
+      : supabase.from('songs').insert(payload);
 
-    return mapRowToSong(resultData);
+    const { data, error } = await query.select(SONG_COLUMNS).single<CloudSongRow>();
+    if (error) throw error;
+
+    return mapRowToSong(data);
   },
 
   /**
@@ -110,24 +114,27 @@ export const CloudLibraryService = {
 
     const { data, error } = await supabase
       .from('songs')
-      .select('*')
+      .select(SONG_COLUMNS)
       .eq('user_id', user.id)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .returns<CloudSongRow[]>();
 
     if (error) throw error;
     return (data || []).map((row) => mapRowToSong(row));
   },
 
   /**
-   * Busca músicas da Biblioteca Global (públicas para toda a comunidade de músicos)
+   * Busca músicas da Biblioteca Global (públicas para toda a comunidade de músicos).
+   * Usa o índice parcial idx_songs_public_created_at (WHERE is_public ORDER BY created_at DESC).
    */
   async fetchGlobalSongs(): Promise<Song[]> {
     const { data, error } = await supabase
       .from('songs')
-      .select('*')
+      .select(SONG_COLUMNS)
       .eq('is_public', true)
       .order('created_at', { ascending: false })
-      .limit(100);
+      .limit(GLOBAL_LIBRARY_LIMIT)
+      .returns<CloudSongRow[]>();
 
     if (error) throw error;
     return (data || []).map((row) => mapRowToSong(row));
