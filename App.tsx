@@ -24,11 +24,13 @@ import { LoginScreen } from './src/screens/LoginScreen';
 import { AdminScreen } from './src/screens/AdminScreen';
 import { AuthGuardService, AuthSession } from './src/auth/authGuard';
 import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
+import { CloudLibraryService } from './src/supabase/cloudLibrary';
+import { AuthService } from './src/supabase/supabaseClient';
 
 type TabType = 'metronome' | 'songs' | 'playlists' | 'live' | 'settings' | 'admin';
 
 function AppContent() {
-  const { currentTheme } = useTheme();
+  const { currentTheme, syncSettingsFromCloud } = useTheme();
   const [authSession, setAuthSession] = useState<AuthSession | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
 
@@ -39,33 +41,83 @@ function AppContent() {
   const [activeLivePlaylist, setActiveLivePlaylist] = useState<Playlist | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Check authentication session on mount
+  // Check authentication session on mount and subscribe to Supabase Auth changes
   useEffect(() => {
+    let isMounted = true;
+
     AuthGuardService.getSession().then((session) => {
+      if (!isMounted) return;
       setAuthSession(session);
       setIsAuthLoading(false);
     });
+
+    const sub = AuthService.onAuthStateChange((user) => {
+      if (!isMounted) return;
+      if (!user) {
+        setAuthSession(null);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      sub?.unsubscribe();
+    };
   }, []);
 
-  // Load data on startup
-  const loadData = async () => {
+  // Load local + cloud data in parallel on startup / login (avoids waterfalls)
+  const loadData = useCallback(async () => {
     try {
-      const loadedSongs = await StorageService.getSongs();
-      const loadedPlaylists = await StorageService.getPlaylists();
-      setSongs(loadedSongs);
-      setPlaylists(loadedPlaylists);
+      const [localSongs, localPlaylists, cloudSongs, cloudPlaylists] = await Promise.all([
+        StorageService.getSongs(),
+        StorageService.getPlaylists(),
+        CloudLibraryService.fetchMySongs().catch(() => [] as Song[]),
+        CloudLibraryService.fetchMyPlaylists().catch(() => [] as Playlist[]),
+      ]);
+
+      // Merge cloud songs with local songs (deduplicating by cloudId or id)
+      let mergedSongs = localSongs;
+      if (cloudSongs.length > 0) {
+        const cloudIds = new Set(cloudSongs.map((cs) => cs.id));
+        const unsyncedLocal = localSongs.filter(
+          (ls) =>
+            !cloudIds.has(ls.id) &&
+            (!ls.cloudId || !cloudIds.has(ls.cloudId)) &&
+            !ls.id.startsWith('seed-')
+        );
+        mergedSongs = [...cloudSongs, ...unsyncedLocal];
+        await StorageService.setSongs(mergedSongs);
+      }
+
+      // Merge cloud playlists with local playlists
+      let mergedPlaylists = localPlaylists;
+      if (cloudPlaylists.length > 0) {
+        const cloudPlaylistIds = new Set(cloudPlaylists.map((cp) => cp.id));
+        const unsyncedLocalPlaylists = localPlaylists.filter(
+          (lp) =>
+            !cloudPlaylistIds.has(lp.id) &&
+            (!lp.cloudId || !cloudPlaylistIds.has(lp.cloudId)) &&
+            !lp.id.startsWith('playlist-')
+        );
+        mergedPlaylists = [...cloudPlaylists, ...unsyncedLocalPlaylists];
+        await StorageService.setPlaylists(mergedPlaylists);
+      }
+
+      setSongs(mergedSongs);
+      setPlaylists(mergedPlaylists);
     } catch (err) {
       console.error('Falha ao carregar dados:', err);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    if (authSession) {
-      loadData();
+    if (authSession?.userId) {
+      Promise.all([loadData(), syncSettingsFromCloud(authSession.userId)]).catch((err) => {
+        console.warn('Falha ao sincronizar sessão inicial:', err);
+      });
     }
-  }, [authSession]);
+  }, [authSession?.userId, loadData, syncSettingsFromCloud]);
 
   const handleLogout = async () => {
     await AuthGuardService.logout();
@@ -100,12 +152,19 @@ function AppContent() {
   };
 
   const handleDeleteSong = async (songId: string) => {
+    const targetSong = songs.find((s) => s.id === songId);
     const updated = await StorageService.deleteSong(songId);
     setSongs(updated);
     const updatedPlaylists = await StorageService.getPlaylists();
     setPlaylists(updatedPlaylists);
     if (currentSong && currentSong.id === songId) {
       setCurrentSong(null);
+    }
+
+    if (targetSong) {
+      CloudLibraryService.deleteSongFromCloud(targetSong).catch((e) => {
+        console.warn('Erro ao remover música na nuvem:', e);
+      });
     }
   };
 
@@ -122,17 +181,38 @@ function AppContent() {
     setActiveTab('songs');
   }, []);
 
+  // Helper to sync a playlist to Supabase and persist its cloudId
+  const syncPlaylistToCloudAsync = useCallback(async (playlist: Playlist) => {
+    try {
+      const uploaded = await CloudLibraryService.uploadPlaylistToCloud(playlist);
+      if (uploaded.cloudId !== playlist.cloudId || uploaded.userId !== playlist.userId) {
+        const synced = { ...playlist, cloudId: uploaded.cloudId, userId: uploaded.userId };
+        const updatedList = await StorageService.savePlaylist(synced);
+        setPlaylists(updatedList);
+      }
+    } catch (e) {
+      console.warn('Erro ao sincronizar playlist na nuvem:', e);
+    }
+  }, []);
+
   // CRUD PLAYLIST HANDLERS
   const handleSavePlaylist = async (playlist: Playlist) => {
     const updated = await StorageService.savePlaylist(playlist);
     setPlaylists(updated);
+    await syncPlaylistToCloudAsync(playlist);
   };
 
   const handleDeletePlaylist = async (playlistId: string) => {
+    const targetPlaylist = playlists.find((p) => p.id === playlistId);
     const updated = await StorageService.deletePlaylist(playlistId);
     setPlaylists(updated);
     if (activeLivePlaylist && activeLivePlaylist.id === playlistId) {
       setActiveLivePlaylist(null);
+    }
+    if (targetPlaylist) {
+      CloudLibraryService.deletePlaylistFromCloud(targetPlaylist).catch((e) => {
+        console.warn('Erro ao remover playlist na nuvem:', e);
+      });
     }
   };
 
@@ -140,11 +220,19 @@ function AppContent() {
     const updated = await StorageService.addSongToPlaylist(playlistId, songId);
     setPlaylists(updated);
     alert('Música adicionada à playlist!');
+    const target = updated.find((p) => p.id === playlistId);
+    if (target) {
+      syncPlaylistToCloudAsync(target);
+    }
   };
 
   const handleRemoveSongFromPlaylist = async (playlistId: string, songIndex: number) => {
     const updated = await StorageService.removeSongFromPlaylist(playlistId, songIndex);
     setPlaylists(updated);
+    const target = updated.find((p) => p.id === playlistId);
+    if (target) {
+      syncPlaylistToCloudAsync(target);
+    }
   };
 
   const handleReorderSongInPlaylist = async (
@@ -154,6 +242,10 @@ function AppContent() {
   ) => {
     const updated = await StorageService.reorderPlaylistSongs(playlistId, fromIndex, toIndex);
     setPlaylists(updated);
+    const target = updated.find((p) => p.id === playlistId);
+    if (target) {
+      syncPlaylistToCloudAsync(target);
+    }
   };
 
   const handleOpenLiveMode = (playlist: Playlist) => {
@@ -170,8 +262,8 @@ function AppContent() {
     );
   }
 
-  // 2. Unauthenticated Barrier: Redirect to Login Screen
-  if (!authSession) {
+  // 2. Mandatory Authentication Barrier: Require valid Supabase auth.uid() before releasing metronome
+  if (!authSession || !authSession.userId) {
     return (
       <LoginScreen
         onLoginSuccess={(session) => {

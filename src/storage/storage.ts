@@ -145,6 +145,10 @@ export const StorageService = {
     }
   },
 
+  async setSongs(songs: Song[]): Promise<void> {
+    await AsyncStorage.setItem(SONGS_KEY, JSON.stringify(songs));
+  },
+
   async saveSong(song: Song): Promise<Song[]> {
     const songs = await this.getSongs();
     const existingIndex = songs.findIndex((s) => s.id === song.id);
@@ -188,6 +192,10 @@ export const StorageService = {
       console.warn('Erro ao carregar playlists do storage:', err);
       return INITIAL_PLAYLISTS;
     }
+  },
+
+  async setPlaylists(playlists: Playlist[]): Promise<void> {
+    await AsyncStorage.setItem(PLAYLISTS_KEY, JSON.stringify(playlists));
   },
 
   async savePlaylist(playlist: Playlist): Promise<Playlist[]> {

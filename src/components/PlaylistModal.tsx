@@ -52,6 +52,9 @@ export const PlaylistModal: React.FC<PlaylistModalProps> = ({
       name: name.trim(),
       description: description.trim() || undefined,
       songIds: playlistToEdit ? playlistToEdit.songIds : [],
+      cloudId: playlistToEdit?.cloudId,
+      userId: playlistToEdit?.userId,
+      isPublic: playlistToEdit?.isPublic,
       createdAt: playlistToEdit ? playlistToEdit.createdAt : Date.now(),
     };
 

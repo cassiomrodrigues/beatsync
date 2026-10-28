@@ -29,7 +29,7 @@ export const SongModal: React.FC<SongModalProps> = ({
   onClose,
   onSave,
 }) => {
-  const { currentTheme } = useTheme();
+  const { currentTheme, defaultSoundType } = useTheme();
   const [title, setTitle] = useState('');
   const [artist, setArtist] = useState('');
   const [bpm, setBpm] = useState(120);
@@ -38,7 +38,7 @@ export const SongModal: React.FC<SongModalProps> = ({
   const [key, setKey] = useState('');
   const [notes, setNotes] = useState('');
   const [duration, setDuration] = useState('');
-  const [soundType, setSoundType] = useState<SoundType>('woodblock');
+  const [soundType, setSoundType] = useState<SoundType>(defaultSoundType);
   const [isPublic, setIsPublic] = useState(false);
   const [errors, setErrors] = useState<{ title?: string; artist?: string }>({});
 
@@ -52,7 +52,7 @@ export const SongModal: React.FC<SongModalProps> = ({
       setKey(songToEdit.key || '');
       setNotes(songToEdit.notes || '');
       setDuration(songToEdit.duration || '');
-      setSoundType(songToEdit.soundType || 'woodblock');
+      setSoundType(songToEdit.soundType || defaultSoundType || 'woodblock');
       setIsPublic(Boolean(songToEdit.isPublic));
     } else {
       setTitle('');
@@ -63,11 +63,11 @@ export const SongModal: React.FC<SongModalProps> = ({
       setKey('');
       setNotes('');
       setDuration('');
-      setSoundType('woodblock');
+      setSoundType(defaultSoundType || 'woodblock');
       setIsPublic(false);
     }
     setErrors({});
-  }, [songToEdit, visible]);
+  }, [songToEdit, visible, defaultSoundType]);
 
   const handleSave = () => {
     const newErrors: { title?: string; artist?: string } = {};

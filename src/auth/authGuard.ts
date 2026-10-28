@@ -6,7 +6,7 @@ export interface AuthSession {
   role: 'admin' | 'user';
   name: string;
   loggedAt: number;
-  userId?: string;
+  userId: string;
 }
 
 export interface UserInvite {
@@ -68,7 +68,8 @@ function mapInviteRow(row: UserInviteRow): UserInvite {
 
 export const AuthGuardService = {
   /**
-   * Realiza login integrado com Supabase Auth e verificação de convites (user_invites)
+   * Realiza login integrado com Supabase Auth e verificação de convites (user_invites).
+   * Exige obrigatoriamente um user.id válido do Supabase (auth.uid()).
    */
   async login(
     email: string,
@@ -89,13 +90,6 @@ export const AuthGuardService = {
       };
     }
 
-    if (!foundInvite && !isMasterEmail) {
-      return {
-        success: false,
-        message: 'Acesso restrito. E-mail não autorizado na lista de convites.',
-      };
-    }
-
     // 2. Autentica no Supabase Auth
     let authUser = null;
     const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
@@ -105,7 +99,7 @@ export const AuthGuardService = {
 
     if (!signInError && signInData?.user) {
       authUser = signInData.user;
-    } else if (foundInvite && foundInvite.status === 'active') {
+    } else if ((foundInvite && foundInvite.status === 'active') || isMasterEmail) {
       // Caso o músico convidado esteja entrando pela primeira vez, provisiona a conta no Supabase Auth
       // (a trigger trg_auto_confirm_invited_user confirma automaticamente e-mails ativos)
       const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
@@ -114,7 +108,7 @@ export const AuthGuardService = {
         options: {
           data: {
             display_name: cleanEmail.split('@')[0],
-            role: foundInvite.role,
+            role: isMasterEmail ? 'admin' : foundInvite?.role || 'musician',
           },
         },
       });
@@ -138,14 +132,23 @@ export const AuthGuardService = {
     } else {
       return {
         success: false,
-        message: 'Credenciais inválidas. Verifique seu e-mail e senha.',
+        message: !foundInvite
+          ? 'Acesso restrito ou credenciais inválidas. Verifique seu e-mail e senha.'
+          : 'Credenciais inválidas. Verifique seu e-mail e senha.',
+      };
+    }
+
+    if (!authUser?.id) {
+      return {
+        success: false,
+        message: 'Não foi possível validar sua identidade no Supabase (auth.uid ausente).',
       };
     }
 
     const resolvedRole: 'admin' | 'user' =
       isMasterEmail || foundInvite?.role === 'admin' ? 'admin' : 'user';
     const displayName =
-      (authUser?.user_metadata?.display_name as string | undefined) ||
+      (authUser.user_metadata?.display_name as string | undefined) ||
       (isMasterEmail ? 'Administrador BeatSync' : cleanEmail.split('@')[0]);
 
     const session: AuthSession = {
@@ -153,7 +156,7 @@ export const AuthGuardService = {
       role: resolvedRole,
       name: displayName,
       loggedAt: Date.now(),
-      userId: authUser?.id,
+      userId: authUser.id,
     };
 
     await AsyncStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(session));
@@ -161,37 +164,37 @@ export const AuthGuardService = {
   },
 
   /**
-   * Obtém a sessão atual sincronizada com o Supabase Auth
+   * Obtém a sessão atual sincronizada obrigatoriamente com o Supabase Auth.
+   * Nunca retorna sessão sem um auth.uid() válido no cliente Supabase.
    */
   async getSession(): Promise<AuthSession | null> {
     try {
-      const { data } = await supabase.auth.getSession();
+      const { data, error } = await supabase.auth.getSession();
       const sbUser = data?.session?.user;
 
-      if (sbUser?.email) {
-        const cleanEmail = sbUser.email.toLowerCase();
-        const isMasterEmail = cleanEmail === MASTER_ADMIN_EMAIL;
-        const metaRole = sbUser.user_metadata?.role;
-        const cachedJson = await AsyncStorage.getItem(AUTH_STORAGE_KEY);
-        const cached = cachedJson ? (JSON.parse(cachedJson) as AuthSession) : null;
-
-        const session: AuthSession = {
-          email: cleanEmail,
-          role: isMasterEmail || metaRole === 'admin' || cached?.role === 'admin' ? 'admin' : 'user',
-          name:
-            (sbUser.user_metadata?.display_name as string | undefined) ||
-            cached?.name ||
-            cleanEmail.split('@')[0],
-          loggedAt: cached?.loggedAt || Date.now(),
-          userId: sbUser.id,
-        };
-        await AsyncStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(session));
-        return session;
+      if (error || !sbUser?.id || !sbUser.email) {
+        await AsyncStorage.removeItem(AUTH_STORAGE_KEY);
+        return null;
       }
 
-      const json = await AsyncStorage.getItem(AUTH_STORAGE_KEY);
-      if (!json) return null;
-      return JSON.parse(json) as AuthSession;
+      const cleanEmail = sbUser.email.toLowerCase();
+      const isMasterEmail = cleanEmail === MASTER_ADMIN_EMAIL;
+      const metaRole = sbUser.user_metadata?.role;
+      const cachedJson = await AsyncStorage.getItem(AUTH_STORAGE_KEY);
+      const cached = cachedJson ? (JSON.parse(cachedJson) as Partial<AuthSession>) : null;
+
+      const session: AuthSession = {
+        email: cleanEmail,
+        role: isMasterEmail || metaRole === 'admin' || cached?.role === 'admin' ? 'admin' : 'user',
+        name:
+          (sbUser.user_metadata?.display_name as string | undefined) ||
+          cached?.name ||
+          cleanEmail.split('@')[0],
+        loggedAt: cached?.loggedAt || Date.now(),
+        userId: sbUser.id,
+      };
+      await AsyncStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(session));
+      return session;
     } catch {
       return null;
     }

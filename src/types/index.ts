@@ -41,7 +41,19 @@ export interface Playlist {
   name: string;
   description?: string;
   songIds: string[]; // ordered array of Song ids
+  cloudId?: string;  // Supabase row UUID (playlists.id) once synced to the cloud
+  userId?: string;   // Owner user ID in Supabase (auth.uid())
+  isPublic?: boolean;
   createdAt: number;
+}
+
+export interface UserSettings {
+  userId: string;
+  themeId: string;
+  defaultSoundType: SoundType;
+  flashEnabled: boolean;
+  hapticsEnabled: boolean;
+  updatedAt?: string;
 }
 
 export interface MetronomeState {

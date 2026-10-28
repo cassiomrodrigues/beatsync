@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { StorageService } from '../storage/storage';
 import { useTheme, ThemeId } from '../theme/ThemeContext';
+import { SoundType } from '../types';
 import { AppIcon } from '../components/AppIcon';
 import { AuthService } from '../supabase/supabaseClient';
 import { CloudLibraryService } from '../supabase/cloudLibrary';
@@ -25,13 +26,29 @@ interface SettingsScreenProps {
   isAdmin?: boolean;
 }
 
+const DEFAULT_SOUND_OPTIONS: ReadonlyArray<{ id: SoundType; label: string }> = [
+  { id: 'woodblock', label: 'Madeira' },
+  { id: 'beep', label: 'Digital' },
+  { id: 'rimshot', label: 'Rimshot' },
+  { id: 'mechanical', label: 'Mecânico' },
+];
+
 export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   onDataReset,
   onLogout,
   onOpenAdmin,
   isAdmin = false,
 }) => {
-  const { currentTheme, isDark, setThemeId, toggleLightTheme, themes } = useTheme();
+  const {
+    currentTheme,
+    isDark,
+    defaultSoundType,
+    setThemeId,
+    toggleLightTheme,
+    setDefaultSoundType,
+    syncSettingsFromCloud,
+    themes,
+  } = useTheme();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isAuthModalVisible, setIsAuthModalVisible] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -70,15 +87,43 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
     setIsSyncing(true);
     setSyncStatus(null);
     try {
-      const localSongs = await StorageService.getSongs();
-      let count = 0;
+      const [localSongs, localPlaylists] = await Promise.all([
+        StorageService.getSongs(),
+        StorageService.getPlaylists(),
+      ]);
+
+      let songCount = 0;
       for (const song of localSongs) {
         const uploaded = await CloudLibraryService.uploadSongToCloud(song, Boolean(song.isPublic));
         // Persist the cloud UUID locally so future syncs update instead of duplicating rows
         await StorageService.saveSong({ ...song, cloudId: uploaded.id, userId: uploaded.userId });
-        count++;
+        songCount++;
       }
-      setSyncStatus(`✅ ${count} músicas sincronizadas com sua conta no Supabase!`);
+
+      let playlistCount = 0;
+      for (const playlist of localPlaylists) {
+        const uploadedPlaylist = await CloudLibraryService.uploadPlaylistToCloud(playlist);
+        await StorageService.savePlaylist({
+          ...playlist,
+          cloudId: uploadedPlaylist.id,
+          userId: uploadedPlaylist.userId,
+        });
+        playlistCount++;
+      }
+
+      await CloudLibraryService.saveUserSettings(
+        {
+          themeId: currentTheme.id,
+          defaultSoundType,
+        },
+        currentUser.id
+      );
+
+      onDataReset();
+      await syncSettingsFromCloud(currentUser.id);
+      setSyncStatus(
+        `✅ ${songCount} músicas, ${playlistCount} playlists e suas configurações foram sincronizadas no Supabase!`
+      );
     } catch (e: any) {
       setSyncStatus(`❌ Falha na sincronização: ${e.message}`);
     } finally {
@@ -339,6 +384,53 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 </View>
                 <Text style={[styles.themeTagline, { color: t.textSecondary }]}>
                   {t.tagline}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        <View style={[styles.divider, { backgroundColor: currentTheme.border }]} />
+
+        <Text style={[styles.cardHeader, { color: currentTheme.accent, marginBottom: 4 }]}>
+          🔊 TIMBRE PADRÃO NA NUVEM (USER_SETTINGS)
+        </Text>
+        <Text style={[styles.cardDesc, { color: currentTheme.textSecondary, marginBottom: 10 }]}>
+          Preferência sincronizada automaticamente com sua conta no Supabase em qualquer dispositivo:
+        </Text>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          {DEFAULT_SOUND_OPTIONS.map((soundOpt) => {
+            const isSelected = defaultSoundType === soundOpt.id;
+            return (
+              <TouchableOpacity
+                key={soundOpt.id}
+                onPress={() => setDefaultSoundType(soundOpt.id)}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityState={{ selected: isSelected }}
+                accessibilityLabel={`Selecionar timbre padrão ${soundOpt.label}`}
+                style={{
+                  flex: 1,
+                  borderRadius: 10,
+                  borderWidth: 1,
+                  paddingVertical: 10,
+                  alignItems: 'center',
+                  backgroundColor: isSelected ? currentTheme.accent : currentTheme.cardElevated,
+                  borderColor: isSelected ? currentTheme.accent : currentTheme.border,
+                }}
+              >
+                <Text
+                  style={{
+                    fontSize: 12,
+                    fontWeight: isSelected ? '800' : '600',
+                    color: isSelected
+                      ? currentTheme.isDark
+                        ? '#000000'
+                        : '#FFFFFF'
+                      : currentTheme.textSecondary,
+                  }}
+                >
+                  {soundOpt.label}
                 </Text>
               </TouchableOpacity>
             );

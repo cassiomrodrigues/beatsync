@@ -416,17 +416,35 @@ export const MetronomeScreen: React.FC<MetronomeScreenProps> = ({
   onClearCurrentSong,
   onOpenSongsTab,
 }) => {
-  const { currentTheme } = useTheme();
+  const {
+    currentTheme,
+    defaultSoundType,
+    flashEnabled: cloudFlashEnabled,
+    setDefaultSoundType,
+    setFlashEnabledPref,
+  } = useTheme();
   const [bpm, setBpm] = useState(120);
   const [timeSignature, setTimeSignature] = useState<TimeSignature>(INITIAL_TIME_SIGNATURE);
   const [subdivision, setSubdivision] = useState<Subdivision>(1);
-  const [soundType, setSoundType] = useState<SoundType>('woodblock');
+  const [soundType, setSoundType] = useState<SoundType>(defaultSoundType);
   const [volume] = useState(0.85);
   const [isMuted, setIsMuted] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [accentPattern, setAccentPattern] = useState<BeatState[]>(INITIAL_ACCENT_PATTERN);
-  const [flashEnabled, setFlashEnabled] = useState(true);
+  const [flashEnabled, setFlashEnabled] = useState(cloudFlashEnabled);
   const [tsModalVisible, setTsModalVisible] = useState(false);
+
+  // Sync default sound type and flash preference when user_settings load from Supabase
+  useEffect(() => {
+    if (!currentSong) {
+      setSoundType(defaultSoundType);
+      audioEngine.updateParameters({ soundType: defaultSoundType });
+    }
+  }, [defaultSoundType, currentSong]);
+
+  useEffect(() => {
+    setFlashEnabled(cloudFlashEnabled);
+  }, [cloudFlashEnabled]);
 
   // Sync parameters with Web Audio API engine (decoupled from theme changes)
   useEffect(() => {
@@ -447,11 +465,11 @@ export const MetronomeScreen: React.FC<MetronomeScreenProps> = ({
     if (!currentSong) return;
     const nextBpm = currentSong.bpm;
     const nextSub = currentSong.subdivision || 1;
-    const nextSound = currentSong.soundType || 'woodblock';
+    const nextSound = currentSong.soundType || defaultSoundType || 'woodblock';
 
     setBpm(nextBpm);
     if (currentSong.subdivision) setSubdivision(currentSong.subdivision);
-    if (currentSong.soundType) setSoundType(currentSong.soundType);
+    setSoundType(nextSound);
 
     const parts = currentSong.timeSignature.split('/');
     const num = parseInt(parts[0], 10) || 4;
@@ -476,7 +494,7 @@ export const MetronomeScreen: React.FC<MetronomeScreenProps> = ({
       soundType: nextSound,
       accentPattern: defaultPattern,
     });
-  }, [currentSong]);
+  }, [currentSong, defaultSoundType]);
 
   // Stable callbacks to prevent child re-renders
   const handleStepMinus5 = useCallback(() => {
@@ -555,15 +573,25 @@ export const MetronomeScreen: React.FC<MetronomeScreenProps> = ({
     audioEngine.updateParameters({ subdivision: sub });
   }, []);
 
-  const handleSelectSoundType = useCallback((type: SoundType) => {
-    setSoundType(type);
-    audioEngine.updateParameters({ soundType: type });
-    audioEngine.playSinglePreviewSound(type);
-  }, []);
+  const handleSelectSoundType = useCallback(
+    (type: SoundType) => {
+      setSoundType(type);
+      audioEngine.updateParameters({ soundType: type });
+      audioEngine.playSinglePreviewSound(type);
+      if (!currentSong) {
+        setDefaultSoundType(type);
+      }
+    },
+    [currentSong, setDefaultSoundType]
+  );
 
   const handleToggleFlash = useCallback(() => {
-    setFlashEnabled((prev) => !prev);
-  }, []);
+    setFlashEnabled((prev) => {
+      const next = !prev;
+      setFlashEnabledPref(next);
+      return next;
+    });
+  }, [setFlashEnabledPref]);
 
   const handleToggleMute = useCallback(() => {
     setIsMuted((prev) => {

@@ -193,6 +193,12 @@ export const SongsScreen: React.FC<SongsScreenProps> = ({
       sharedBy: undefined,
     };
     onSaveSong(importedSong);
+    try {
+      const uploaded = await CloudLibraryService.uploadSongToCloud(importedSong, false);
+      onSaveSong({ ...importedSong, cloudId: uploaded.cloudId, userId: uploaded.userId });
+    } catch (e: unknown) {
+      console.warn('Erro ao sincronizar música importada na nuvem:', e);
+    }
     alert(`"${song.title}" foi importada com sucesso para o seu repertório pessoal!`);
   };
 
