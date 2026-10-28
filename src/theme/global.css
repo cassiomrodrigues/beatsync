@@ -132,6 +132,38 @@ html.dark .dark\:bg-black {
   background-color: #000000 !important;
 }
 
+/* Mobile-First Responsive & Layout Utilities (Song Card Actions & FAB Breathing Room) */
+.flex-wrap {
+  flex-wrap: wrap;
+}
+
+.gap-2 {
+  gap: 0.5rem;
+}
+
+.pb-36 {
+  padding-bottom: 9rem;
+}
+
+.hidden {
+  display: none !important;
+}
+
+@media (min-width: 768px) {
+  .md\:inline {
+    display: inline !important;
+  }
+  .md\:inline-block {
+    display: inline-block !important;
+  }
+}
+
+@media (min-width: 1024px) {
+  .lg\:inline {
+    display: inline !important;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

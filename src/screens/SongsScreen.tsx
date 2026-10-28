@@ -10,6 +10,7 @@ import {
   Platform,
   ActivityIndicator,
   RefreshControl,
+  useWindowDimensions,
 } from 'react-native';
 import { Song, Playlist } from '../types';
 import { SongModal } from '../components/SongModal';
@@ -32,6 +33,12 @@ interface SongsScreenProps {
 type LibraryTab = 'my_songs' | 'global' | 'shared';
 type SortOption = 'recent' | 'title' | 'artist' | 'bpmAsc' | 'bpmDesc';
 
+const webUtilityClasses = {
+  flexWrapGap2: { $$css: true, _: 'flex-wrap gap-2' },
+  hiddenMdInline: { $$css: true, _: 'hidden md:inline' },
+  pb36: { $$css: true, _: 'pb-36' },
+} as const;
+
 export const SongsScreen: React.FC<SongsScreenProps> = ({
   songs,
   playlists,
@@ -42,6 +49,9 @@ export const SongsScreen: React.FC<SongsScreenProps> = ({
   onCreateNewPlaylist,
 }) => {
   const { currentTheme } = useTheme();
+  const { width: viewportWidth } = useWindowDimensions();
+  const isWideScreen = viewportWidth >= 768;
+
   const [activeTab, setActiveTab] = useState<LibraryTab>('my_songs');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortOption, setSortOption] = useState<SortOption>('recent');
@@ -403,7 +413,11 @@ export const SongsScreen: React.FC<SongsScreenProps> = ({
         <FlatList
           data={filteredSongs}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listContent}
+          style={styles.list}
+          contentContainerStyle={[
+            styles.listContent,
+            Platform.OS === 'web' && (webUtilityClasses.pb36 as any),
+          ]}
           showsVerticalScrollIndicator={false}
           refreshControl={
             activeTab === 'my_songs' ? undefined : (
@@ -535,12 +549,21 @@ export const SongsScreen: React.FC<SongsScreenProps> = ({
                 </Text>
               )}
 
-              {/* Actions Row */}
-              <View style={styles.actionsRow}>
-                {/* Play in metronome */}
+              {/* Actions Row (Flex Wrap + Gap-2 to prevent button overflow on narrow screens) */}
+              <View
+                style={[
+                  styles.actionsRow,
+                  Platform.OS === 'web' && (webUtilityClasses.flexWrapGap2 as any),
+                ]}
+                // @ts-expect-error web-only Tailwind className for flex-wrap and gap-2
+                className="flex-wrap gap-2"
+              >
+                {/* Play in metronome (Primary stage action: always full icon + text across all breakpoints) */}
                 <TouchableOpacity
                   activeOpacity={0.8}
                   onPress={() => onSelectSongForMetronome(item)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Abrir ${item.title} no Metrônomo`}
                   style={[styles.playBtn, { backgroundColor: currentTheme.accent }]}
                 >
                   <Text style={[styles.playBtnIcon, { color: currentTheme.isDark ? '#000000' : '#FFFFFF' }]}>▶</Text>
@@ -551,6 +574,8 @@ export const SongsScreen: React.FC<SongsScreenProps> = ({
                 {activeTab !== 'my_songs' ? (
                   <TouchableOpacity
                     onPress={() => handleImportSong(item)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Salvar ${item.title} no Meu Repertório`}
                     style={[styles.actionIconBtn, { backgroundColor: currentTheme.cardElevated, borderColor: currentTheme.border }]}
                   >
                     <Text style={[styles.actionIconText, { color: currentTheme.accent }]}>
@@ -559,20 +584,48 @@ export const SongsScreen: React.FC<SongsScreenProps> = ({
                   </TouchableOpacity>
                 ) : (
                   <>
-                    {/* Add to Playlist */}
+                    {/* Add to Playlist (Icon-only on mobile, icon + text on md:+ screens) */}
                     <TouchableOpacity
                       onPress={() => setPlaylistModalSong(item)}
+                      accessibilityRole="button"
+                      accessibilityLabel="Adicionar ao Setlist"
                       style={[styles.actionIconBtn, { backgroundColor: currentTheme.cardElevated, borderColor: currentTheme.border }]}
                     >
-                      <Text style={[styles.actionIconText, { color: currentTheme.text }]}>➕ Setlist</Text>
+                      <Text style={[styles.actionIconText, { color: currentTheme.text }]}>➕</Text>
+                      <Text
+                        style={[
+                          styles.actionIconText,
+                          { color: currentTheme.text },
+                          !isWideScreen && styles.actionLabelHiddenMobile,
+                          Platform.OS === 'web' && (webUtilityClasses.hiddenMdInline as any),
+                        ]}
+                        // @ts-expect-error web-only Tailwind responsive utility class
+                        className="hidden md:inline"
+                      >
+                        Setlist
+                      </Text>
                     </TouchableOpacity>
 
-                    {/* Share Modal Trigger */}
+                    {/* Share Modal Trigger (Icon-only on mobile, icon + text on md:+ screens) */}
                     <TouchableOpacity
                       onPress={() => setShareModalSong(item)}
+                      accessibilityRole="button"
+                      accessibilityLabel="Compartilhar música"
                       style={[styles.actionIconBtn, { backgroundColor: currentTheme.cardElevated, borderColor: currentTheme.border }]}
                     >
-                      <Text style={[styles.actionIconText, { color: currentTheme.accent }]}>🔗 Compartilhar</Text>
+                      <Text style={[styles.actionIconText, { color: currentTheme.accent }]}>🔗</Text>
+                      <Text
+                        style={[
+                          styles.actionIconText,
+                          { color: currentTheme.accent },
+                          !isWideScreen && styles.actionLabelHiddenMobile,
+                          Platform.OS === 'web' && (webUtilityClasses.hiddenMdInline as any),
+                        ]}
+                        // @ts-expect-error web-only Tailwind responsive utility class
+                        className="hidden md:inline"
+                      >
+                        Compartilhar
+                      </Text>
                     </TouchableOpacity>
 
                     {/* Edit */}
@@ -581,6 +634,8 @@ export const SongsScreen: React.FC<SongsScreenProps> = ({
                         setSelectedSongToEdit(item);
                         setIsModalVisible(true);
                       }}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Editar ${item.title}`}
                       style={[styles.actionIconBtn, { backgroundColor: currentTheme.cardElevated, borderColor: currentTheme.border }]}
                     >
                       <Text style={styles.actionIconText}>✏️</Text>
@@ -589,6 +644,8 @@ export const SongsScreen: React.FC<SongsScreenProps> = ({
                     {/* Delete */}
                     <TouchableOpacity
                       onPress={() => confirmDelete(item)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Excluir ${item.title}`}
                       style={[styles.actionIconBtn, { backgroundColor: currentTheme.isDark ? '#351114' : '#FEE2E2', borderColor: currentTheme.danger }]}
                     >
                       <Text style={styles.deleteIconText}>🗑</Text>
@@ -650,6 +707,7 @@ export const SongsScreen: React.FC<SongsScreenProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    minHeight: 0,
   },
   subTabsContainer: {
     flexDirection: 'row',
@@ -720,9 +778,13 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
   },
+  list: {
+    flex: 1,
+    minHeight: 0,
+  },
   listContent: {
     padding: 16,
-    paddingBottom: 100,
+    paddingBottom: 144,
   },
   centerLoading: {
     flex: 1,
@@ -809,6 +871,7 @@ const styles = StyleSheet.create({
   },
   actionsRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     gap: 8,
     marginTop: 6,
@@ -816,9 +879,11 @@ const styles = StyleSheet.create({
   playBtn: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     borderRadius: 8,
     paddingVertical: 8,
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
+    minHeight: 38,
     gap: 6,
   },
   playBtnIcon: {
@@ -830,16 +895,23 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   actionIconBtn: {
+    flexDirection: 'row',
     borderRadius: 8,
     borderWidth: 1,
     paddingVertical: 8,
     paddingHorizontal: 10,
+    minHeight: 38,
+    minWidth: 38,
+    gap: 5,
     alignItems: 'center',
     justifyContent: 'center',
   },
   actionIconText: {
     fontSize: 11,
     fontWeight: '700',
+  },
+  actionLabelHiddenMobile: {
+    display: 'none',
   },
   deleteBtn: {
     backgroundColor: '#351114',
