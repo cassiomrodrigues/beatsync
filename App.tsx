@@ -11,8 +11,8 @@ import {
   Alert,
 } from 'react-native';
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
-import Ionicons from '@expo/vector-icons/Ionicons';
 import './src/theme/global.css';
+import { AppIcon } from './src/components/AppIcon';
 import { Song, Playlist } from './src/types';
 import { StorageService } from './src/storage/storage';
 import { MetronomeScreen } from './src/screens/MetronomeScreen';
@@ -229,7 +229,7 @@ function AppContent() {
           accessibilityRole="button"
           accessibilityLabel="Sair do aplicativo"
         >
-          <Ionicons name="log-out-outline" size={13} color={currentTheme.textSecondary} />
+          <AppIcon name="log-out-outline" size={14} color={currentTheme.textSecondary} />
           <Text style={[styles.fixedLogoutText, { color: currentTheme.textSecondary }]}>Sair</Text>
         </TouchableOpacity>
       </View>
@@ -328,9 +328,9 @@ function AppContent() {
             ],
           ]}
         >
-          <Ionicons
+          <AppIcon
             name={activeTab === 'metronome' ? 'speedometer' : 'speedometer-outline'}
-            size={18}
+            size={20}
             color={activeTab === 'metronome' ? currentTheme.accent : currentTheme.textSecondary}
           />
           <Text
@@ -361,9 +361,9 @@ function AppContent() {
             ],
           ]}
         >
-          <Ionicons
+          <AppIcon
             name={activeTab === 'songs' ? 'musical-notes' : 'musical-notes-outline'}
-            size={18}
+            size={20}
             color={activeTab === 'songs' ? currentTheme.accent : currentTheme.textSecondary}
           />
           <Text
@@ -394,9 +394,9 @@ function AppContent() {
             ],
           ]}
         >
-          <Ionicons
+          <AppIcon
             name={activeTab === 'playlists' ? 'list' : 'list-outline'}
-            size={18}
+            size={20}
             color={activeTab === 'playlists' ? currentTheme.accent : currentTheme.textSecondary}
           />
           <Text
@@ -427,9 +427,9 @@ function AppContent() {
             ],
           ]}
         >
-          <Ionicons
+          <AppIcon
             name={activeTab === 'live' ? 'mic' : 'mic-outline'}
-            size={18}
+            size={20}
             color={activeTab === 'live' ? currentTheme.accent : currentTheme.textSecondary}
           />
           <Text
@@ -460,9 +460,9 @@ function AppContent() {
             ],
           ]}
         >
-          <Ionicons
+          <AppIcon
             name={activeTab === 'settings' ? 'settings' : 'settings-outline'}
-            size={18}
+            size={20}
             color={activeTab === 'settings' ? currentTheme.accent : currentTheme.textSecondary}
           />
           <Text
@@ -495,9 +495,9 @@ function AppContent() {
               ],
             ]}
           >
-            <Ionicons
+            <AppIcon
               name={activeTab === 'admin' ? 'shield-checkmark' : 'shield-checkmark-outline'}
-              size={18}
+              size={20}
               color={activeTab === 'admin' ? currentTheme.accent : currentTheme.textSecondary}
             />
             <Text

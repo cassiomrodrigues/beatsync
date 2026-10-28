@@ -9,7 +9,9 @@ let wakeLockSentinel: any = null;
 async function requestScreenWakeLock() {
   try {
     await KeepAwake.activateKeepAwakeAsync('beatsync-playback');
-  } catch {}
+  } catch {
+    // Fallback if keep-awake is unavailable on current platform
+  }
 
   if (typeof navigator !== 'undefined' && 'wakeLock' in (navigator as any)) {
     try {
@@ -17,19 +19,25 @@ async function requestScreenWakeLock() {
       wakeLockSentinel.addEventListener('release', () => {
         wakeLockSentinel = null;
       });
-    } catch {}
+    } catch {
+      // Ignore if wakeLock permission is denied
+    }
   }
 }
 
 async function releaseScreenWakeLock() {
   try {
     KeepAwake.deactivateKeepAwake('beatsync-playback');
-  } catch {}
+  } catch {
+    // Ignore deactivation errors
+  }
 
   if (wakeLockSentinel) {
     try {
       await wakeLockSentinel.release();
-    } catch {}
+    } catch {
+      // Ignore release errors
+    }
     wakeLockSentinel = null;
   }
 }
@@ -59,7 +67,11 @@ class AudioEngine {
   private currentBeatInMeasure: number = 0;
   private currentSubdivisionIndex: number = 0;
   private nextNoteTime: number = 0;
-  private timerId: any = null;
+  private timerId: ReturnType<typeof setInterval> | null = null;
+  private pendingVisualTimers: Set<ReturnType<typeof setTimeout>> = new Set();
+  private playbackGeneration: number = 0;
+  private isUnlocked: boolean = false;
+  private noiseBuffer: AudioBuffer | null = null;
   private lookaheadMs: number = 25; // How frequently to call scheduling (ms)
   private scheduleAheadTimeSec: number = 0.1; // How far ahead to schedule audio (sec)
 
@@ -68,19 +80,84 @@ class AudioEngine {
   public onSubdivisionCallback: ((subIndex: number) => void) | null = null;
 
   constructor() {
-    // Lazy init audio context on first user gesture
+    this.setupGlobalInteractionUnlock();
   }
 
-  private initContextIfNeeded() {
-    if (!this.audioCtx) {
+  /**
+   * Pre-warms and unlocks the mobile Web Audio API context on the very first touch/click
+   * anywhere in the app so the hardware audio clock is already running before Play is pressed.
+   */
+  private setupGlobalInteractionUnlock() {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return;
+
+    const unlockHandler = () => {
+      this.initContextIfNeeded();
+      if (this.audioCtx && this.audioCtx.state === 'running' && this.isUnlocked) {
+        window.removeEventListener('pointerdown', unlockHandler, true);
+        window.removeEventListener('touchstart', unlockHandler, true);
+        window.removeEventListener('keydown', unlockHandler, true);
+      }
+    };
+
+    window.addEventListener('pointerdown', unlockHandler, { capture: true, passive: true });
+    window.addEventListener('touchstart', unlockHandler, { capture: true, passive: true });
+    window.addEventListener('keydown', unlockHandler, { capture: true, passive: true });
+  }
+
+  private clearPendingVisualTimers() {
+    this.pendingVisualTimers.forEach((id) => clearTimeout(id));
+    this.pendingVisualTimers.clear();
+  }
+
+  private initContextIfNeeded(): Promise<void> {
+    if (!this.audioCtx && typeof window !== 'undefined') {
       const AudioCtxClass = (window as any).AudioContext || (window as any).webkitAudioContext;
       if (AudioCtxClass) {
-        this.audioCtx = new AudioCtxClass();
+        try {
+          this.audioCtx = new AudioCtxClass({ latencyHint: 'interactive' });
+        } catch {
+          this.audioCtx = new AudioCtxClass();
+        }
       }
     }
-    if (this.audioCtx && this.audioCtx.state === 'suspended') {
-      this.audioCtx.resume();
+
+    if (!this.audioCtx) {
+      return Promise.resolve();
     }
+
+    // Play a 1-frame silent buffer synchronously inside the user gesture to wake mobile hardware DAC
+    if (!this.isUnlocked) {
+      try {
+        const silentBuffer = this.audioCtx.createBuffer(1, 1, this.audioCtx.sampleRate || 44100);
+        const source = this.audioCtx.createBufferSource();
+        source.buffer = silentBuffer;
+        source.connect(this.audioCtx.destination);
+        source.start(0);
+        this.isUnlocked = true;
+      } catch {
+        // Ignore if context is not ready yet
+      }
+    }
+
+    if (this.audioCtx.state === 'suspended' || (this.audioCtx.state as string) === 'interrupted') {
+      return this.audioCtx.resume().catch(() => {});
+    }
+
+    return Promise.resolve();
+  }
+
+  private getOrCreateNoiseBuffer(): AudioBuffer | null {
+    if (!this.audioCtx) return null;
+    if (!this.noiseBuffer || this.noiseBuffer.sampleRate !== this.audioCtx.sampleRate) {
+      const bufferSize = Math.max(1, Math.floor(this.audioCtx.sampleRate * 0.02));
+      const buffer = this.audioCtx.createBuffer(1, bufferSize, this.audioCtx.sampleRate);
+      const output = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        output[i] = Math.random() * 2 - 1;
+      }
+      this.noiseBuffer = buffer;
+    }
+    return this.noiseBuffer;
   }
 
   public updateParameters(params: {
@@ -95,9 +172,21 @@ class AudioEngine {
     accentPattern?: BeatState[];
   }) {
     if (params.bpm !== undefined) this.bpm = Math.max(20, Math.min(320, params.bpm));
-    if (params.numerator !== undefined) this.numerator = Math.max(1, params.numerator);
+    if (params.numerator !== undefined) {
+      const nextNum = Math.max(1, params.numerator);
+      this.numerator = nextNum;
+      if (this.currentBeatInMeasure >= nextNum) {
+        this.currentBeatInMeasure = 0;
+      }
+    }
     if (params.denominator !== undefined) this.denominator = params.denominator;
-    if (params.subdivision !== undefined) this.subdivision = Math.max(1, Math.min(4, params.subdivision));
+    if (params.subdivision !== undefined) {
+      const nextSub = Math.max(1, Math.min(4, params.subdivision));
+      this.subdivision = nextSub;
+      if (this.currentSubdivisionIndex >= nextSub) {
+        this.currentSubdivisionIndex = 0;
+      }
+    }
     if (params.soundType !== undefined) this.soundType = params.soundType;
     if (params.volume !== undefined) this.volume = Math.max(0, Math.min(1, params.volume));
     if (params.isMuted !== undefined) this.isMuted = params.isMuted;
@@ -109,30 +198,54 @@ class AudioEngine {
 
   public start() {
     if (this.isRunning) return;
-    this.initContextIfNeeded();
     this.isRunning = true;
-    this.currentBeatInMeasure = 0;
-    this.currentSubdivisionIndex = 0;
+    this.playbackGeneration++;
+    const currentGen = this.playbackGeneration;
+
+    this.clearPendingVisualTimers();
+    if (this.timerId) {
+      clearInterval(this.timerId);
+      this.timerId = null;
+    }
 
     // Keep screen awake while player is running (crucial for live stage and rehearsals)
     requestScreenWakeLock();
 
-    if (this.audioCtx) {
-      this.nextNoteTime = this.audioCtx.currentTime + 0.05;
-    } else {
-      this.nextNoteTime = performance.now() / 1000 + 0.05;
-    }
+    const beginLoop = () => {
+      if (!this.isRunning || this.playbackGeneration !== currentGen) return;
 
-    this.timerId = setInterval(() => this.scheduler(), this.lookaheadMs);
+      this.currentBeatInMeasure = 0;
+      this.currentSubdivisionIndex = 0;
+
+      const now = this.audioCtx ? this.audioCtx.currentTime : performance.now() / 1000;
+      this.nextNoteTime = now + 0.035;
+
+      // Immediately run first scheduling pass so Beat 1 is queued without waiting 25ms
+      this.scheduler();
+      this.timerId = setInterval(() => this.scheduler(), this.lookaheadMs);
+    };
+
+    const resumePromise = this.initContextIfNeeded();
+
+    if (this.audioCtx && this.audioCtx.state !== 'running') {
+      // Wait for mobile hardware audio clock to transition to 'running' before anchoring nextNoteTime
+      resumePromise.then(() => {
+        beginLoop();
+      });
+    } else {
+      beginLoop();
+    }
   }
 
   public stop() {
     if (!this.isRunning) return;
     this.isRunning = false;
+    this.playbackGeneration++;
     if (this.timerId) {
       clearInterval(this.timerId);
       this.timerId = null;
     }
+    this.clearPendingVisualTimers();
     this.currentBeatInMeasure = 0;
     this.currentSubdivisionIndex = 0;
 
@@ -147,13 +260,26 @@ class AudioEngine {
   private scheduler() {
     if (!this.isRunning) return;
 
+    // On mobile browsers (e.g. Chrome Android on Motorola Edge 50), AudioContext.currentTime
+    // remains frozen at 0 until state transitions to 'running'. Do not advance notes while suspended!
+    if (this.audioCtx && this.audioCtx.state !== 'running') {
+      this.audioCtx.resume().catch(() => {});
+      return;
+    }
+
     const currentTime = this.audioCtx ? this.audioCtx.currentTime : performance.now() / 1000;
+
+    // Guard against clock drift or tab backgrounding so queued notes never burst all at once
+    if (this.nextNoteTime < currentTime - 0.15) {
+      this.nextNoteTime = currentTime + 0.02;
+    }
 
     while (this.nextNoteTime < currentTime + this.scheduleAheadTimeSec) {
       this.scheduleNote(
         this.currentBeatInMeasure,
         this.currentSubdivisionIndex,
-        this.nextNoteTime
+        this.nextNoteTime,
+        currentTime
       );
       this.advanceNote();
     }
@@ -179,23 +305,31 @@ class AudioEngine {
     }
   }
 
-  private scheduleNote(beatNumber: number, subIndex: number, time: number) {
+  private scheduleNote(
+    beatNumber: number,
+    subIndex: number,
+    time: number,
+    currentTime: number
+  ) {
     const isMainBeat = subIndex === 0;
     const isDownbeat = beatNumber === 0 && isMainBeat;
     const beatState = this.accentPattern[beatNumber] || (isDownbeat ? 'accent' : 'normal');
 
     // If muted beat state, skip sound
     const shouldPlaySound = !this.isMuted && beatState !== 'mute';
+    const safeScheduleTime = Math.max(time, currentTime);
 
     if (shouldPlaySound && this.audioCtx) {
-      this.synthesizeSound(beatState, isMainBeat, isDownbeat, time);
+      this.synthesizeSound(beatState, isMainBeat, isDownbeat, safeScheduleTime);
     }
 
     // Trigger visual/haptic callbacks at precise time
-    const delayMs = Math.max(0, (time - (this.audioCtx ? this.audioCtx.currentTime : performance.now() / 1000)) * 1000);
+    const delayMs = Math.max(0, (safeScheduleTime - currentTime) * 1000);
+    const scheduledGen = this.playbackGeneration;
 
-    setTimeout(() => {
-      if (!this.isRunning) return;
+    const visualTimerId = setTimeout(() => {
+      this.pendingVisualTimers.delete(visualTimerId);
+      if (!this.isRunning || this.playbackGeneration !== scheduledGen) return;
 
       if (isMainBeat) {
         if (this.onBeatCallback) {
@@ -216,6 +350,8 @@ class AudioEngine {
         this.onSubdivisionCallback(subIndex);
       }
     }, delayMs);
+
+    this.pendingVisualTimers.add(visualTimerId);
   }
 
   private synthesizeSound(
@@ -278,6 +414,11 @@ class AudioEngine {
     osc.connect(gainNode);
     gainNode.connect(this.audioCtx.destination);
 
+    osc.onended = () => {
+      osc.disconnect();
+      gainNode.disconnect();
+    };
+
     osc.start(time);
     osc.stop(time + 0.07);
   }
@@ -306,6 +447,12 @@ class AudioEngine {
     filter.connect(gain);
     gain.connect(this.audioCtx.destination);
 
+    osc.onended = () => {
+      osc.disconnect();
+      filter.disconnect();
+      gain.disconnect();
+    };
+
     osc.start(time);
     osc.stop(time + 0.06);
   }
@@ -328,16 +475,18 @@ class AudioEngine {
 
     osc.connect(oscGain);
     oscGain.connect(this.audioCtx.destination);
+
+    osc.onended = () => {
+      osc.disconnect();
+      oscGain.disconnect();
+    };
+
     osc.start(time);
     osc.stop(time + 0.05);
 
-    // Noise burst for crisp click
-    const bufferSize = this.audioCtx.sampleRate * 0.02;
-    const noiseBuffer = this.audioCtx.createBuffer(1, bufferSize, this.audioCtx.sampleRate);
-    const output = noiseBuffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      output[i] = Math.random() * 2 - 1;
-    }
+    // Reuse cached noise buffer for crisp click
+    const noiseBuffer = this.getOrCreateNoiseBuffer();
+    if (!noiseBuffer) return;
 
     const whiteNoise = this.audioCtx.createBufferSource();
     whiteNoise.buffer = noiseBuffer;
@@ -354,6 +503,12 @@ class AudioEngine {
     whiteNoise.connect(noiseFilter);
     noiseFilter.connect(noiseGain);
     noiseGain.connect(this.audioCtx.destination);
+
+    whiteNoise.onended = () => {
+      whiteNoise.disconnect();
+      noiseFilter.disconnect();
+      noiseGain.disconnect();
+    };
 
     whiteNoise.start(time);
     whiteNoise.stop(time + 0.03);
@@ -377,18 +532,34 @@ class AudioEngine {
 
     osc1.connect(gain1);
     gain1.connect(this.audioCtx.destination);
+
+    osc1.onended = () => {
+      osc1.disconnect();
+      gain1.disconnect();
+    };
+
     osc1.start(time);
     osc1.stop(time + 0.025);
   }
 
   public playSinglePreviewSound(type: SoundType) {
-    this.initContextIfNeeded();
+    const resumePromise = this.initContextIfNeeded();
     if (!this.audioCtx) return;
-    const now = this.audioCtx.currentTime + 0.01;
-    const prevType = this.soundType;
-    this.soundType = type;
-    this.synthesizeSound('accent', true, true, now);
-    this.soundType = prevType;
+
+    const triggerPreview = () => {
+      if (!this.audioCtx) return;
+      const now = this.audioCtx.currentTime + 0.01;
+      const prevType = this.soundType;
+      this.soundType = type;
+      this.synthesizeSound('accent', true, true, now);
+      this.soundType = prevType;
+    };
+
+    if (this.audioCtx.state !== 'running') {
+      resumePromise.then(triggerPreview);
+    } else {
+      triggerPreview();
+    }
   }
 }
 

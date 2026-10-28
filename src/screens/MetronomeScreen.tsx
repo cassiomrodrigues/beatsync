@@ -7,7 +7,7 @@ import {
   ScrollView,
   Platform,
 } from 'react-native';
-import Ionicons from '@expo/vector-icons/Ionicons';
+import { AppIcon } from '../components/AppIcon';
 import { audioEngine } from '../audio/audioEngine';
 import { BeatVisualizer } from '../components/BeatVisualizer';
 import { TapTempo } from '../components/TapTempo';
@@ -95,7 +95,7 @@ const PracticeTimerBadge: React.FC<{ isRunning: boolean; theme: ThemeColors }> =
         ]}
         accessibilityLabel={`Tempo de treino: ${formatTimer(seconds)}`}
       >
-        <Ionicons name="time-outline" size={12} color={theme.success} />
+        <AppIcon name="time-outline" size={14} color={theme.success} />
         <Text style={[styles.timerValueText, { color: theme.success }]}>
           {formatTimer(seconds)}
         </Text>
@@ -445,7 +445,11 @@ export const MetronomeScreen: React.FC<MetronomeScreenProps> = ({
   // Load song parameters when a song is selected from the library
   useEffect(() => {
     if (!currentSong) return;
-    setBpm(currentSong.bpm);
+    const nextBpm = currentSong.bpm;
+    const nextSub = currentSong.subdivision || 1;
+    const nextSound = currentSong.soundType || 'woodblock';
+
+    setBpm(nextBpm);
     if (currentSong.subdivision) setSubdivision(currentSong.subdivision);
     if (currentSong.soundType) setSoundType(currentSong.soundType);
 
@@ -462,27 +466,54 @@ export const MetronomeScreen: React.FC<MetronomeScreenProps> = ({
       i === 0 ? 'accent' : 'normal'
     );
     setAccentPattern(defaultPattern);
+
+    // Synchronously push song parameters into audioEngine so immediate play uses them
+    audioEngine.updateParameters({
+      bpm: nextBpm,
+      numerator: num,
+      denominator: den,
+      subdivision: nextSub,
+      soundType: nextSound,
+      accentPattern: defaultPattern,
+    });
   }, [currentSong]);
 
   // Stable callbacks to prevent child re-renders
   const handleStepMinus5 = useCallback(() => {
-    setBpm((b) => Math.max(20, b - 5));
+    setBpm((b) => {
+      const next = Math.max(20, b - 5);
+      audioEngine.updateParameters({ bpm: next });
+      return next;
+    });
   }, []);
 
   const handleStepMinus1 = useCallback(() => {
-    setBpm((b) => Math.max(20, b - 1));
+    setBpm((b) => {
+      const next = Math.max(20, b - 1);
+      audioEngine.updateParameters({ bpm: next });
+      return next;
+    });
   }, []);
 
   const handleStepPlus1 = useCallback(() => {
-    setBpm((b) => Math.min(320, b + 1));
+    setBpm((b) => {
+      const next = Math.min(320, b + 1);
+      audioEngine.updateParameters({ bpm: next });
+      return next;
+    });
   }, []);
 
   const handleStepPlus5 = useCallback(() => {
-    setBpm((b) => Math.min(320, b + 5));
+    setBpm((b) => {
+      const next = Math.min(320, b + 5);
+      audioEngine.updateParameters({ bpm: next });
+      return next;
+    });
   }, []);
 
   const handleTapTempoCalculated = useCallback((newBpm: number) => {
     setBpm(newBpm);
+    audioEngine.updateParameters({ bpm: newBpm });
   }, []);
 
   const handleSelectTimeSignature = useCallback((newTs: TimeSignature) => {
@@ -492,6 +523,11 @@ export const MetronomeScreen: React.FC<MetronomeScreenProps> = ({
       (_, i) => (i === 0 ? 'accent' : 'normal')
     );
     setAccentPattern(newPattern);
+    audioEngine.updateParameters({
+      numerator: newTs.numerator,
+      denominator: newTs.denominator,
+      accentPattern: newPattern,
+    });
   }, []);
 
   const handleToggleBeatState = useCallback((index: number) => {
@@ -501,6 +537,7 @@ export const MetronomeScreen: React.FC<MetronomeScreenProps> = ({
       const nextIndex = (cycle.indexOf(current) + 1) % cycle.length;
       const copy = [...prev];
       copy[index] = cycle[nextIndex];
+      audioEngine.updateParameters({ accentPattern: copy });
       return copy;
     });
   }, []);
@@ -515,10 +552,12 @@ export const MetronomeScreen: React.FC<MetronomeScreenProps> = ({
 
   const handleSelectSubdivision = useCallback((sub: Subdivision) => {
     setSubdivision(sub);
+    audioEngine.updateParameters({ subdivision: sub });
   }, []);
 
   const handleSelectSoundType = useCallback((type: SoundType) => {
     setSoundType(type);
+    audioEngine.updateParameters({ soundType: type });
     audioEngine.playSinglePreviewSound(type);
   }, []);
 
@@ -527,7 +566,11 @@ export const MetronomeScreen: React.FC<MetronomeScreenProps> = ({
   }, []);
 
   const handleToggleMute = useCallback(() => {
-    setIsMuted((prev) => !prev);
+    setIsMuted((prev) => {
+      const next = !prev;
+      audioEngine.updateParameters({ isMuted: next });
+      return next;
+    });
   }, []);
 
   const togglePlay = useCallback(() => {
@@ -536,11 +579,22 @@ export const MetronomeScreen: React.FC<MetronomeScreenProps> = ({
         audioEngine.stop();
         return false;
       } else {
+        // Ensure latest state parameters are synced right before starting
+        audioEngine.updateParameters({
+          bpm,
+          numerator: timeSignature.numerator,
+          denominator: timeSignature.denominator,
+          subdivision,
+          soundType,
+          volume,
+          isMuted,
+          accentPattern,
+        });
         audioEngine.start();
         return true;
       }
     });
-  }, []);
+  }, [bpm, timeSignature, subdivision, soundType, volume, isMuted, accentPattern]);
 
   const playBtnTextColor = currentTheme.isDark ? '#000000' : '#FFFFFF';
 
@@ -564,7 +618,7 @@ export const MetronomeScreen: React.FC<MetronomeScreenProps> = ({
                 },
               ]}
             >
-              <Ionicons name="musical-notes" size={13} color={currentTheme.accent} />
+              <AppIcon name="musical-notes" size={14} color={currentTheme.accent} />
               <Text
                 style={[styles.compactSongTitle, { color: currentTheme.text }]}
                 numberOfLines={1}
@@ -579,7 +633,7 @@ export const MetronomeScreen: React.FC<MetronomeScreenProps> = ({
                 accessibilityLabel="Liberar música ativa"
                 style={styles.clearSongInlineBtn}
               >
-                <Ionicons name="close-circle" size={16} color={currentTheme.danger} />
+                <AppIcon name="close-circle" size={16} color={currentTheme.danger} />
               </TouchableOpacity>
             </View>
           ) : (
@@ -596,9 +650,9 @@ export const MetronomeScreen: React.FC<MetronomeScreenProps> = ({
                 },
               ]}
             >
-              <Ionicons
+              <AppIcon
                 name="library-outline"
-                size={12}
+                size={14}
                 color={currentTheme.textSecondary}
               />
               <Text
@@ -630,9 +684,9 @@ export const MetronomeScreen: React.FC<MetronomeScreenProps> = ({
                 },
               ]}
             >
-              <Ionicons
+              <AppIcon
                 name={flashEnabled ? 'flash' : 'flash-off-outline'}
-                size={13}
+                size={16}
                 color={flashEnabled ? '#EAB308' : currentTheme.textMuted}
               />
             </TouchableOpacity>
@@ -655,9 +709,9 @@ export const MetronomeScreen: React.FC<MetronomeScreenProps> = ({
                 },
               ]}
             >
-              <Ionicons
+              <AppIcon
                 name={isMuted ? 'volume-mute' : 'volume-high'}
-                size={13}
+                size={16}
                 color={isMuted ? currentTheme.danger : currentTheme.textSecondary}
               />
             </TouchableOpacity>
@@ -726,7 +780,7 @@ export const MetronomeScreen: React.FC<MetronomeScreenProps> = ({
             },
           ]}
         >
-          <Ionicons
+          <AppIcon
             name={isRunning ? 'stop' : 'play'}
             size={20}
             color={isRunning ? '#FFFFFF' : playBtnTextColor}

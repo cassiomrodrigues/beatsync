@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -34,6 +34,7 @@ export const LiveSetlistScreen: React.FC<LiveSetlistScreenProps> = ({
   const [isFlashActive, setIsFlashActive] = useState(false);
   const [jumpModalVisible, setJumpModalVisible] = useState(false);
   const [accentPattern, setAccentPattern] = useState<BeatState[]>(['accent', 'normal', 'normal', 'normal']);
+  const flashTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Map of songs by ID
   const songsMap = new Map<string, Song>();
@@ -82,12 +83,14 @@ export const LiveSetlistScreen: React.FC<LiveSetlistScreenProps> = ({
       setCurrentBeat(beatIndex);
       if (isDownbeat) {
         setIsFlashActive(true);
-        setTimeout(() => setIsFlashActive(false), 90);
+        if (flashTimeoutRef.current) clearTimeout(flashTimeoutRef.current);
+        flashTimeoutRef.current = setTimeout(() => setIsFlashActive(false), 90);
       }
     };
 
     return () => {
       audioEngine.onBeatCallback = null;
+      if (flashTimeoutRef.current) clearTimeout(flashTimeoutRef.current);
     };
   }, []);
 
@@ -97,6 +100,19 @@ export const LiveSetlistScreen: React.FC<LiveSetlistScreenProps> = ({
       setIsRunning(false);
       setCurrentBeat(0);
     } else {
+      if (currentSong) {
+        const parts = currentSong.timeSignature.split('/');
+        const num = parseInt(parts[0], 10) || 4;
+        const den = parseInt(parts[1], 10) || 4;
+        audioEngine.updateParameters({
+          bpm: currentSong.bpm,
+          numerator: num,
+          denominator: den,
+          subdivision: currentSong.subdivision || 1,
+          soundType: currentSong.soundType || 'woodblock',
+          accentPattern,
+        });
+      }
       audioEngine.start();
       setIsRunning(true);
     }

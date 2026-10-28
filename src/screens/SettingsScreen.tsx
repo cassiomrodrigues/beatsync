@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { StorageService } from '../storage/storage';
 import { useTheme, ThemeId } from '../theme/ThemeContext';
-import Ionicons from '@expo/vector-icons/Ionicons';
+import { AppIcon } from '../components/AppIcon';
 import { AuthService } from '../supabase/supabaseClient';
 import { CloudLibraryService } from '../supabase/cloudLibrary';
 import { AuthModal } from '../components/AuthModal';
@@ -278,7 +278,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               },
             ]}
           >
-            <Ionicons
+            <AppIcon
               name={!isDark ? 'sunny' : 'moon'}
               size={14}
               color={!isDark ? '#FFFFFF' : currentTheme.accent}
