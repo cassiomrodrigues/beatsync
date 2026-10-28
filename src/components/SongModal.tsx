@@ -670,55 +670,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '900',
   },
-  visibilityCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1E2235',
-    borderWidth: 1,
-    borderColor: '#2F3652',
-    borderRadius: 12,
-    padding: 12,
-  },
-  visibilityCardPublic: {
-    borderColor: '#00E5FF',
-    backgroundColor: '#0D2738',
-  },
-  visibilityIcon: {
-    fontSize: 24,
-  },
-  visibilityTitle: {
-    color: '#E0E6F8',
-    fontSize: 14,
-    fontWeight: '700',
-    marginBottom: 2,
-  },
-  visibilityTitlePublic: {
-    color: '#00E5FF',
-  },
-  visibilityDesc: {
-    color: '#8A94B2',
-    fontSize: 11,
-    lineHeight: 15,
-  },
-  toggleCircle: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: '#4A5578',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 8,
-  },
-  toggleCircleActive: {
-    borderColor: '#00E5FF',
-    backgroundColor: '#00E5FF',
-  },
-  toggleCheck: {
-    color: '#0E1017',
-    fontSize: 14,
-    fontWeight: '900',
-  },
   saveBtn: {
     borderRadius: 12,
     paddingVertical: 14,
