@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   ScrollView,
   Modal,
+  Platform,
 } from 'react-native';
 import { Playlist, Song, BeatState } from '../types';
 import { audioEngine } from '../audio/audioEngine';
@@ -130,6 +131,7 @@ export const LiveSetlistScreen: React.FC<LiveSetlistScreenProps> = ({
     }
   };
 
+  const isPulsar = Boolean(currentTheme.hasBrandGradient);
   const selectedFill = currentTheme.isOled ? '#000000' : currentTheme.navActive;
   const playBtnTextColor = currentTheme.isDark ? '#000000' : '#FFFFFF';
 
@@ -177,7 +179,11 @@ export const LiveSetlistScreen: React.FC<LiveSetlistScreenProps> = ({
 
   const parts = currentSong ? currentSong.timeSignature.split('/') : ['4', '4'];
   const numerator = parseInt(parts[0], 10) || 4;
-  const flashBg = currentTheme.isDark ? '#1E2536' : '#E0F2FE';
+  const flashBg = isPulsar
+    ? '#132604'
+    : currentTheme.isDark
+    ? '#1E2536'
+    : '#E0F2FE';
 
   return (
     <View
@@ -220,9 +226,21 @@ export const LiveSetlistScreen: React.FC<LiveSetlistScreenProps> = ({
             style={[
               styles.mainSongCard,
               { backgroundColor: currentTheme.card, borderColor: currentTheme.accent },
+              Platform.OS === 'web'
+                ? ({
+                    boxShadow: isPulsar
+                      ? '0 0 20px rgba(137, 242, 27, 0.18), 0 0 8px rgba(255, 94, 0, 0.12)'
+                      : 'none',
+                  } as any)
+                : null,
             ]}
           >
-            <Text style={[styles.songTag, { color: currentTheme.accent }]}>
+            <Text
+              style={[
+                styles.songTag,
+                { color: isPulsar ? currentTheme.accentSecondary : currentTheme.accent },
+              ]}
+            >
               MÚSICA ATUAL NO PALCO
             </Text>
             <Text style={[styles.songTitle, { color: currentTheme.text }]} numberOfLines={2}>
@@ -292,14 +310,24 @@ export const LiveSetlistScreen: React.FC<LiveSetlistScreenProps> = ({
                   {
                     backgroundColor: currentTheme.cardElevated,
                     borderColor: currentTheme.border,
-                    borderLeftColor: currentTheme.isDark ? '#FFD600' : '#D97706',
+                    borderLeftColor: isPulsar
+                      ? currentTheme.accentSecondary
+                      : currentTheme.isDark
+                      ? '#FFD600'
+                      : '#D97706',
                   },
                 ]}
               >
                 <Text
                   style={[
                     styles.notesBoxLabel,
-                    { color: currentTheme.isDark ? '#FFD600' : '#B45309' },
+                    {
+                      color: isPulsar
+                        ? currentTheme.accentSecondary
+                        : currentTheme.isDark
+                        ? '#FFD600'
+                        : '#B45309',
+                    },
                   ]}
                 >
                   📌 OBSERVAÇÕES DE PALCO
@@ -338,7 +366,21 @@ export const LiveSetlistScreen: React.FC<LiveSetlistScreenProps> = ({
             {
               backgroundColor: isRunning ? currentTheme.danger : currentTheme.accent,
               shadowColor: isRunning ? currentTheme.danger : currentTheme.accent,
+              borderWidth: isPulsar && !isRunning ? 1 : 0,
+              borderColor: isPulsar && !isRunning ? '#B2FD0D' : 'transparent',
             },
+            Platform.OS === 'web'
+              ? ({
+                  backgroundImage:
+                    !isRunning && isPulsar
+                      ? `linear-gradient(90deg, ${currentTheme.gradientStart} 0%, #FF7B00 32%, ${currentTheme.gradientEnd} 100%)`
+                      : 'none',
+                  boxShadow:
+                    !isRunning && isPulsar
+                      ? '0 0 24px rgba(137, 242, 27, 0.55), 0 0 10px rgba(255, 94, 0, 0.4)'
+                      : 'none',
+                } as any)
+              : null,
           ]}
         >
           <Text style={[styles.playIcon, { color: isRunning ? '#FFFFFF' : playBtnTextColor }]}>

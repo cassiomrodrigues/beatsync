@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback } from 'react';
-import { TouchableOpacity, Text, StyleSheet, Animated, View } from 'react-native';
+import { TouchableOpacity, Text, StyleSheet, Animated, View, Platform } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 
 interface TapTempoProps {
@@ -68,6 +68,8 @@ export const TapTempo: React.FC<TapTempoProps> = React.memo(({ onTempoCalculated
     }, 2500);
   }, [onTempoCalculated, scaleAnim]);
 
+  const isPulsar = Boolean(currentTheme.hasBrandGradient);
+
   return (
     <Animated.View style={[styles.wrapper, { transform: [{ scale: scaleAnim }] }]}>
       <TouchableOpacity
@@ -79,15 +81,57 @@ export const TapTempo: React.FC<TapTempoProps> = React.memo(({ onTempoCalculated
           styles.button,
           {
             backgroundColor: currentTheme.cardElevated,
-            borderColor: tapCount > 0 ? currentTheme.accent : currentTheme.border,
+            borderColor:
+              tapCount > 0
+                ? currentTheme.accent
+                : isPulsar
+                ? currentTheme.accentSecondary
+                : currentTheme.border,
           },
+          Platform.OS === 'web'
+            ? ({
+                boxShadow:
+                  tapCount > 0 && isPulsar
+                    ? '0 0 12px rgba(137, 242, 27, 0.45)'
+                    : 'none',
+              } as any)
+            : null,
         ]}
       >
         <View style={styles.row}>
-          <Text style={[styles.title, { color: currentTheme.accent }]}>TAP TEMPO</Text>
+          <Text
+            style={[
+              styles.title,
+              {
+                color:
+                  isPulsar && tapCount === 0
+                    ? currentTheme.accentSecondary
+                    : currentTheme.accent,
+              },
+            ]}
+          >
+            TAP TEMPO
+          </Text>
           {tapCount > 1 ? (
-            <View style={[styles.badge, { backgroundColor: currentTheme.accent }]}>
-              <Text style={[styles.badgeText, { color: currentTheme.isDark ? '#000000' : '#FFFFFF' }]}>
+            <View
+              style={[
+                styles.badge,
+                { backgroundColor: currentTheme.accent },
+                Platform.OS === 'web'
+                  ? ({
+                      backgroundImage: isPulsar
+                        ? `linear-gradient(90deg, ${currentTheme.gradientStart} 0%, ${currentTheme.gradientEnd} 100%)`
+                        : 'none',
+                    } as any)
+                  : null,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.badgeText,
+                  { color: currentTheme.isDark ? '#000000' : '#FFFFFF' },
+                ]}
+              >
                 {tapCount}x
               </Text>
             </View>

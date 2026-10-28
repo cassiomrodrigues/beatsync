@@ -4,7 +4,13 @@ import { SoundType } from '../types';
 import { CloudLibraryService } from '../supabase/cloudLibrary';
 import { AuthService } from '../supabase/supabaseClient';
 
-export type ThemeId = 'oled_zero' | 'light_day' | 'oled_amber' | 'dark_studio' | 'high_contrast';
+export type ThemeId =
+  | 'oled_zero'
+  | 'pulsar_cyber_lime'
+  | 'light_day'
+  | 'oled_amber'
+  | 'dark_studio'
+  | 'high_contrast';
 
 export interface ThemeColors {
   id: ThemeId;
@@ -12,6 +18,10 @@ export interface ThemeColors {
   tagline: string;
   isOled: boolean;
   isDark: boolean;
+  hasBrandGradient?: boolean;
+  gradientStart?: string;
+  gradientEnd?: string;
+  glowColor?: string;
   background: string;
   card: string;
   cardElevated: string;
@@ -47,6 +57,30 @@ export const THEMES: Record<ThemeId, ThemeColors> = {
     navActive: '#000000',
     danger: '#FF4D4D',
     success: '#00E676',
+  },
+  pulsar_cyber_lime: {
+    id: 'pulsar_cyber_lime',
+    name: 'Pulsar (Cyber Lime)',
+    tagline: 'Preto absoluto #000000 • Degradê oficial Verde-Limão & Laranja Neon',
+    isOled: true,
+    isDark: true,
+    hasBrandGradient: true,
+    gradientStart: '#FF5E00',
+    gradientEnd: '#89F21B',
+    glowColor: '#89F21B',
+    background: '#000000',
+    card: '#000000',
+    cardElevated: '#070E03',
+    border: '#2A4510',
+    text: '#F7FEE7',
+    textSecondary: '#B5E477',
+    textMuted: '#6E9938',
+    accent: '#89F21B',
+    accentSecondary: '#FF5E00',
+    navBackground: '#000000',
+    navActive: '#0F1F05',
+    danger: '#FF3D00',
+    success: '#89F21B',
   },
   light_day: {
     id: 'light_day',
@@ -148,6 +182,15 @@ function syncDocumentTheme(theme: ThemeColors): void {
   }
 
   root.dataset.theme = theme.id;
+  root.style.setProperty('--bg-primary', theme.background);
+  root.style.setProperty('--bg-card', theme.card);
+  root.style.setProperty('--bg-elevated', theme.cardElevated);
+  root.style.setProperty('--border-color', theme.border);
+  root.style.setProperty('--text-primary', theme.text);
+  root.style.setProperty('--text-secondary', theme.textSecondary);
+  root.style.setProperty('--text-muted', theme.textMuted);
+  root.style.setProperty('--accent-color', theme.accent);
+  root.style.setProperty('--accent-secondary', theme.accentSecondary);
   root.style.backgroundColor = theme.background;
   if (document.body) {
     document.body.style.backgroundColor = theme.background;
@@ -173,6 +216,22 @@ function syncDocumentTheme(theme: ThemeColors): void {
     meta.name = 'theme-color';
     meta.content = theme.background;
     document.head.appendChild(meta);
+  }
+
+  // Ensure PWA manifest and apple-touch-icon links exist for home screen installation
+  if (document.head) {
+    if (!document.querySelector('link[rel="manifest"]')) {
+      const manifestLink = document.createElement('link');
+      manifestLink.rel = 'manifest';
+      manifestLink.href = '/manifest.json';
+      document.head.appendChild(manifestLink);
+    }
+    if (!document.querySelector('link[rel="apple-touch-icon"]')) {
+      const appleIcon = document.createElement('link');
+      appleIcon.rel = 'apple-touch-icon';
+      appleIcon.href = '/apple-touch-icon.png';
+      document.head.appendChild(appleIcon);
+    }
   }
 }
 

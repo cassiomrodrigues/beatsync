@@ -3,6 +3,7 @@ import {
   SafeAreaView,
   View,
   Text,
+  Image,
   StyleSheet,
   TouchableOpacity,
   StatusBar as RNStatusBar,
@@ -26,6 +27,8 @@ import { AuthGuardService, AuthSession } from './src/auth/authGuard';
 import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
 import { CloudLibraryService } from './src/supabase/cloudLibrary';
 import { AuthService } from './src/supabase/supabaseClient';
+
+const HORIZONTAL_LOGO = require('./assets/logo-horizontal.png');
 
 type TabType = 'metronome' | 'songs' | 'playlists' | 'live' | 'settings' | 'admin';
 
@@ -274,6 +277,7 @@ function AppContent() {
   }
 
   const isAdmin = authSession.role === 'admin';
+  const isPulsar = Boolean(currentTheme.hasBrandGradient);
 
   // 3. Authenticated App Experience
   return (
@@ -287,23 +291,52 @@ function AppContent() {
     >
       <ExpoStatusBar style={currentTheme.isDark ? 'light' : 'dark'} />
 
-      {/* Compact Fixed Top Bar with Safe-Area Top Support */}
+      {/* Compact Fixed Top Bar with Official Horizontal Logo & Safe-Area Top Support */}
       <View
         style={[
           styles.topHeader,
           {
             backgroundColor: currentTheme.navBackground,
-            borderBottomColor: currentTheme.border,
+            borderBottomColor: isPulsar ? currentTheme.accent : currentTheme.border,
           },
+          Platform.OS === 'web'
+            ? ({
+                boxShadow: isPulsar ? '0 1px 10px rgba(137, 242, 27, 0.18)' : 'none',
+              } as any)
+            : null,
         ]}
         // @ts-expect-error web-only className for iOS notch safe area
         className="safe-top"
       >
         <View style={styles.topHeaderLeft}>
-          <Text style={[styles.topHeaderLogo, { color: currentTheme.accent }]}>BEATSYNC</Text>
+          <View
+            style={[
+              styles.logoHeaderPill,
+              !currentTheme.isDark && styles.logoHeaderPillLight,
+            ]}
+          >
+            <Image
+              source={HORIZONTAL_LOGO}
+              style={styles.topHeaderLogoImage}
+              resizeMode="contain"
+              accessibilityLabel="BeatSync Logo"
+            />
+          </View>
           {isAdmin && (
-            <View style={[styles.topAdminBadge, { borderColor: currentTheme.accent }]}>
-              <Text style={[styles.topAdminBadgeText, { color: currentTheme.accent }]}>ADMIN</Text>
+            <View
+              style={[
+                styles.topAdminBadge,
+                { borderColor: isPulsar ? currentTheme.accentSecondary : currentTheme.accent },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.topAdminBadgeText,
+                  { color: isPulsar ? currentTheme.accentSecondary : currentTheme.accent },
+                ]}
+              >
+                ADMIN
+              </Text>
             </View>
           )}
         </View>
@@ -400,7 +433,7 @@ function AppContent() {
           styles.bottomNav,
           {
             backgroundColor: currentTheme.navBackground,
-            borderTopColor: currentTheme.border,
+            borderTopColor: isPulsar ? currentTheme.border : currentTheme.border,
           },
         ]}
         // @ts-expect-error web-only className for iOS home indicator safe area
@@ -416,7 +449,10 @@ function AppContent() {
             styles.navTab,
             activeTab === 'metronome' && [
               styles.navTabActive,
-              { backgroundColor: currentTheme.navActive },
+              {
+                backgroundColor: currentTheme.navActive,
+                borderColor: isPulsar ? currentTheme.accent : 'transparent',
+              },
             ],
           ]}
         >
@@ -449,7 +485,10 @@ function AppContent() {
             styles.navTab,
             activeTab === 'songs' && [
               styles.navTabActive,
-              { backgroundColor: currentTheme.navActive },
+              {
+                backgroundColor: currentTheme.navActive,
+                borderColor: isPulsar ? currentTheme.accent : 'transparent',
+              },
             ],
           ]}
         >
@@ -482,7 +521,10 @@ function AppContent() {
             styles.navTab,
             activeTab === 'playlists' && [
               styles.navTabActive,
-              { backgroundColor: currentTheme.navActive },
+              {
+                backgroundColor: currentTheme.navActive,
+                borderColor: isPulsar ? currentTheme.accent : 'transparent',
+              },
             ],
           ]}
         >
@@ -515,7 +557,10 @@ function AppContent() {
             styles.navTab,
             activeTab === 'live' && [
               styles.navTabActive,
-              { backgroundColor: currentTheme.navActive },
+              {
+                backgroundColor: currentTheme.navActive,
+                borderColor: isPulsar ? currentTheme.accent : 'transparent',
+              },
             ],
           ]}
         >
@@ -548,7 +593,10 @@ function AppContent() {
             styles.navTab,
             activeTab === 'settings' && [
               styles.navTabActive,
-              { backgroundColor: currentTheme.navActive },
+              {
+                backgroundColor: currentTheme.navActive,
+                borderColor: isPulsar ? currentTheme.accent : 'transparent',
+              },
             ],
           ]}
         >
@@ -583,7 +631,10 @@ function AppContent() {
               styles.navTab,
               activeTab === 'admin' && [
                 styles.navTabActive,
-                { backgroundColor: currentTheme.navActive },
+                {
+                  backgroundColor: currentTheme.navActive,
+                  borderColor: isPulsar ? currentTheme.accent : 'transparent',
+                },
               ],
             ]}
           >
@@ -636,7 +687,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 12,
-    paddingVertical: 4,
+    paddingVertical: 5,
     borderBottomWidth: 1,
     flexShrink: 0,
   },
@@ -645,10 +696,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  topHeaderLogo: {
-    fontSize: 12,
-    fontWeight: '900',
-    letterSpacing: 2,
+  logoHeaderPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logoHeaderPillLight: {
+    backgroundColor: '#090D16',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  topHeaderLogoImage: {
+    width: 96,
+    height: 28,
   },
   topAdminBadge: {
     borderWidth: 1,
@@ -695,6 +756,8 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     paddingHorizontal: 6,
     borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'transparent',
     minWidth: 54,
     minHeight: 44,
     gap: 2,

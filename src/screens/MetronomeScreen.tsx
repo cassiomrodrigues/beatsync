@@ -150,18 +150,31 @@ const LiveBeatSection: React.FC<LiveBeatSectionProps> = React.memo(
       };
     }, [flashEnabled]);
 
+    const isPulsar = Boolean(theme.hasBrandGradient);
+    const flashBackground = isPulsar
+      ? '#132604'
+      : theme.isDark
+      ? '#112233'
+      : '#E0F2FE';
+
     return (
       <View
         style={[
           styles.beatVisualizerBox,
           {
-            backgroundColor: isFlashActive
-              ? theme.isDark
-                ? '#112233'
-                : '#E0F2FE'
-              : theme.card,
+            backgroundColor: isFlashActive ? flashBackground : theme.card,
             borderColor: isFlashActive ? theme.accent : theme.border,
           },
+          Platform.OS === 'web'
+            ? ({
+                boxShadow:
+                  isFlashActive && isPulsar
+                    ? '0 0 20px rgba(137, 242, 27, 0.5), inset 0 0 12px rgba(255, 94, 0, 0.25)'
+                    : isPulsar
+                    ? '0 0 12px rgba(137, 242, 27, 0.08)'
+                    : 'none',
+              } as any)
+            : null,
         ]}
       >
         <BeatVisualizer
@@ -191,6 +204,7 @@ interface BpmControlsRowProps {
 
 const BpmControlsRow: React.FC<BpmControlsRowProps> = React.memo(
   ({ onStepMinus5, onStepMinus1, onStepPlus1, onStepPlus5, onTapTempo, theme }) => {
+    const isPulsar = Boolean(theme.hasBrandGradient);
     return (
       <View style={styles.steppersRow}>
         <TouchableOpacity
@@ -203,7 +217,9 @@ const BpmControlsRow: React.FC<BpmControlsRowProps> = React.memo(
             { backgroundColor: theme.cardElevated, borderColor: theme.border },
           ]}
         >
-          <Text style={[styles.stepBtnText, { color: theme.text }]}>−5</Text>
+          <Text style={[styles.stepBtnText, { color: isPulsar ? theme.accent : theme.text }]}>
+            −5
+          </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -216,7 +232,9 @@ const BpmControlsRow: React.FC<BpmControlsRowProps> = React.memo(
             { backgroundColor: theme.cardElevated, borderColor: theme.border },
           ]}
         >
-          <Text style={[styles.stepBtnText, { color: theme.text }]}>−1</Text>
+          <Text style={[styles.stepBtnText, { color: isPulsar ? theme.accent : theme.text }]}>
+            −1
+          </Text>
         </TouchableOpacity>
 
         <TapTempo onTempoCalculated={onTapTempo} />
@@ -231,7 +249,9 @@ const BpmControlsRow: React.FC<BpmControlsRowProps> = React.memo(
             { backgroundColor: theme.cardElevated, borderColor: theme.border },
           ]}
         >
-          <Text style={[styles.stepBtnText, { color: theme.text }]}>+1</Text>
+          <Text style={[styles.stepBtnText, { color: isPulsar ? theme.accent : theme.text }]}>
+            +1
+          </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -244,7 +264,9 @@ const BpmControlsRow: React.FC<BpmControlsRowProps> = React.memo(
             { backgroundColor: theme.cardElevated, borderColor: theme.border },
           ]}
         >
-          <Text style={[styles.stepBtnText, { color: theme.text }]}>+5</Text>
+          <Text style={[styles.stepBtnText, { color: isPulsar ? theme.accent : theme.text }]}>
+            +5
+          </Text>
         </TouchableOpacity>
       </View>
     );
@@ -277,6 +299,7 @@ const BottomParametersContainer: React.FC<BottomParametersContainerProps> = Reac
     theme,
   }) => {
     const activeTextColor = theme.isDark ? '#000000' : '#FFFFFF';
+    const isPulsar = Boolean(theme.hasBrandGradient);
 
     return (
       <View
@@ -302,13 +325,28 @@ const BottomParametersContainer: React.FC<BottomParametersContainerProps> = Reac
               accessibilityLabel={`Compasso atual ${timeSignature.label}. Toque para alterar`}
               style={[
                 styles.timeSigButton,
-                { backgroundColor: theme.card, borderColor: theme.border },
+                {
+                  backgroundColor: theme.card,
+                  borderColor: isPulsar ? theme.accentSecondary : theme.border,
+                },
+                Platform.OS === 'web'
+                  ? ({
+                      boxShadow: isPulsar
+                        ? '0 0 10px rgba(255, 94, 0, 0.14)'
+                        : 'none',
+                    } as any)
+                  : null,
               ]}
             >
               <Text style={[styles.controlLabel, { color: theme.textSecondary }]}>
                 COMPASSO
               </Text>
-              <Text style={[styles.timeSigValue, { color: theme.accent }]}>
+              <Text
+                style={[
+                  styles.timeSigValue,
+                  { color: isPulsar ? theme.accentSecondary : theme.accent },
+                ]}
+              >
                 {timeSignature.label}
               </Text>
             </TouchableOpacity>
@@ -339,8 +377,24 @@ const BottomParametersContainer: React.FC<BottomParametersContainerProps> = Reac
                           backgroundColor: isSelected
                             ? theme.accent
                             : theme.cardElevated,
-                          borderColor: isSelected ? theme.accent : theme.border,
+                          borderColor: isSelected
+                            ? isPulsar
+                              ? '#B2FD0D'
+                              : theme.accent
+                            : theme.border,
                         },
+                        Platform.OS === 'web'
+                          ? ({
+                              backgroundImage:
+                                isSelected && isPulsar
+                                  ? `linear-gradient(135deg, ${theme.gradientStart} 0%, ${theme.gradientEnd} 100%)`
+                                  : 'none',
+                              boxShadow:
+                                isSelected && isPulsar
+                                  ? '0 0 12px rgba(137, 242, 27, 0.4)'
+                                  : 'none',
+                            } as any)
+                          : null,
                       ]}
                     >
                       <Text
@@ -386,8 +440,24 @@ const BottomParametersContainer: React.FC<BottomParametersContainerProps> = Reac
                         backgroundColor: isSelected
                           ? theme.accent
                           : theme.cardElevated,
-                        borderColor: isSelected ? theme.accent : theme.border,
+                        borderColor: isSelected
+                          ? isPulsar
+                            ? '#B2FD0D'
+                            : theme.accent
+                          : theme.border,
                       },
+                      Platform.OS === 'web'
+                        ? ({
+                            backgroundImage:
+                              isSelected && isPulsar
+                                ? `linear-gradient(135deg, ${theme.gradientStart} 0%, ${theme.gradientEnd} 100%)`
+                                : 'none',
+                            boxShadow:
+                              isSelected && isPulsar
+                                ? '0 0 12px rgba(137, 242, 27, 0.4)'
+                                : 'none',
+                          } as any)
+                        : null,
                     ]}
                   >
                     <Text
@@ -624,6 +694,7 @@ export const MetronomeScreen: React.FC<MetronomeScreenProps> = ({
     });
   }, [bpm, timeSignature, subdivision, soundType, volume, isMuted, accentPattern]);
 
+  const isPulsar = Boolean(currentTheme.hasBrandGradient);
   const playBtnTextColor = currentTheme.isDark ? '#000000' : '#FFFFFF';
 
   return (
@@ -646,7 +717,11 @@ export const MetronomeScreen: React.FC<MetronomeScreenProps> = ({
                 },
               ]}
             >
-              <AppIcon name="musical-notes" size={14} color={currentTheme.accent} />
+              <AppIcon
+                name="musical-notes"
+                size={14}
+                color={isPulsar ? currentTheme.accentSecondary : currentTheme.accent}
+              />
               <Text
                 style={[styles.compactSongTitle, { color: currentTheme.text }]}
                 numberOfLines={1}
@@ -681,7 +756,7 @@ export const MetronomeScreen: React.FC<MetronomeScreenProps> = ({
               <AppIcon
                 name="library-outline"
                 size={14}
-                color={currentTheme.textSecondary}
+                color={isPulsar ? currentTheme.accentSecondary : currentTheme.textSecondary}
               />
               <Text
                 style={[styles.compactFreeText, { color: currentTheme.textSecondary }]}
@@ -704,18 +779,30 @@ export const MetronomeScreen: React.FC<MetronomeScreenProps> = ({
                 styles.utilityBtn,
                 {
                   backgroundColor: flashEnabled
-                    ? currentTheme.isDark
+                    ? isPulsar
+                      ? '#2B1000'
+                      : currentTheme.isDark
                       ? '#26220A'
                       : '#FEF9C3'
                     : currentTheme.card,
-                  borderColor: flashEnabled ? '#EAB308' : currentTheme.border,
+                  borderColor: flashEnabled
+                    ? isPulsar
+                      ? currentTheme.accentSecondary
+                      : '#EAB308'
+                    : currentTheme.border,
                 },
               ]}
             >
               <AppIcon
                 name={flashEnabled ? 'flash' : 'flash-off-outline'}
                 size={16}
-                color={flashEnabled ? '#EAB308' : currentTheme.textMuted}
+                color={
+                  flashEnabled
+                    ? isPulsar
+                      ? currentTheme.accentSecondary
+                      : '#EAB308'
+                    : currentTheme.textMuted
+                }
               />
             </TouchableOpacity>
 
@@ -756,17 +843,34 @@ export const MetronomeScreen: React.FC<MetronomeScreenProps> = ({
               backgroundColor: currentTheme.card,
               borderColor: currentTheme.border,
             },
+            Platform.OS === 'web'
+              ? ({
+                  boxShadow: isPulsar
+                    ? '0 0 18px rgba(137, 242, 27, 0.12), inset 0 0 10px rgba(255, 94, 0, 0.06)'
+                    : 'none',
+                } as any)
+              : null,
           ]}
         >
           <View style={styles.bpmHeroCenter}>
-            <Text style={[styles.tempoMarkingText, { color: currentTheme.accent }]}>
+            <Text
+              style={[
+                styles.tempoMarkingText,
+                { color: isPulsar ? currentTheme.accentSecondary : currentTheme.accent },
+              ]}
+            >
               {getTempoName(bpm).toUpperCase()}
             </Text>
             <View style={styles.bpmDisplayRow}>
               <Text style={[styles.bpmNumber, { color: currentTheme.text }]}>
                 {bpm}
               </Text>
-              <Text style={[styles.bpmUnit, { color: currentTheme.textSecondary }]}>
+              <Text
+                style={[
+                  styles.bpmUnit,
+                  { color: isPulsar ? currentTheme.accent : currentTheme.textSecondary },
+                ]}
+              >
                 BPM
               </Text>
             </View>
@@ -805,7 +909,23 @@ export const MetronomeScreen: React.FC<MetronomeScreenProps> = ({
             {
               backgroundColor: isRunning ? currentTheme.danger : currentTheme.accent,
               shadowColor: isRunning ? currentTheme.danger : currentTheme.accent,
+              borderWidth: isPulsar && !isRunning ? 1 : 0,
+              borderColor: isPulsar && !isRunning ? '#B2FD0D' : 'transparent',
             },
+            Platform.OS === 'web'
+              ? ({
+                  backgroundImage:
+                    !isRunning && isPulsar
+                      ? `linear-gradient(90deg, ${currentTheme.gradientStart} 0%, #FF7B00 32%, ${currentTheme.gradientEnd} 100%)`
+                      : 'none',
+                  boxShadow:
+                    !isRunning && isPulsar
+                      ? '0 0 22px rgba(137, 242, 27, 0.5), 0 0 10px rgba(255, 94, 0, 0.4)'
+                      : isRunning && isPulsar
+                      ? '0 0 18px rgba(255, 61, 0, 0.55)'
+                      : 'none',
+                } as any)
+              : null,
           ]}
         >
           <AppIcon

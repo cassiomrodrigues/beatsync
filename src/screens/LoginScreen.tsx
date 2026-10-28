@@ -3,6 +3,7 @@ import {
   SafeAreaView,
   View,
   Text,
+  Image,
   TextInput,
   TouchableOpacity,
   StyleSheet,
@@ -13,6 +14,8 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import { AuthGuardService, AuthSession } from '../auth/authGuard';
 import { useTheme } from '../theme/ThemeContext';
+
+const HORIZONTAL_LOGO = require('../../assets/logo-horizontal.png');
 
 interface LoginScreenProps {
   onLoginSuccess: (session: AuthSession) => void;
@@ -52,6 +55,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
     }
   };
 
+  const isPulsar = Boolean(currentTheme.hasBrandGradient);
   const btnTextColor = currentTheme.isDark ? '#000000' : '#FFFFFF';
 
   return (
@@ -62,17 +66,21 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <View style={[styles.container, { backgroundColor: currentTheme.background }]}>
-          {/* Minimalist Logo & Header */}
+          {/* Prominent Centered Official Brand Logo & Header */}
           <View style={styles.header}>
             <View
               style={[
-                styles.logoBadge,
-                { backgroundColor: currentTheme.card, borderColor: currentTheme.accent },
+                styles.logoShowcase,
+                !currentTheme.isDark && styles.logoShowcaseLight,
               ]}
             >
-              <Text style={styles.logoIcon}>⏱</Text>
+              <Image
+                source={HORIZONTAL_LOGO}
+                style={styles.heroLogoImage}
+                resizeMode="contain"
+                accessibilityLabel="BeatSync Logotipo Oficial"
+              />
             </View>
-            <Text style={[styles.brandTitle, { color: currentTheme.text }]}>BeatSync</Text>
             <Text style={[styles.brandSubtitle, { color: currentTheme.accent }]}>
               METRÔNOMO PROGRESSIVO PWA
             </Text>
@@ -93,6 +101,13 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
             style={[
               styles.formCard,
               { backgroundColor: currentTheme.card, borderColor: currentTheme.border },
+              Platform.OS === 'web'
+                ? ({
+                    boxShadow: isPulsar
+                      ? '0 0 24px rgba(137, 242, 27, 0.14), 0 0 8px rgba(255, 94, 0, 0.08)'
+                      : 'none',
+                  } as any)
+                : null,
             ]}
           >
             <Text style={[styles.inputLabel, { color: currentTheme.textSecondary }]}>
@@ -148,6 +163,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
               <TouchableOpacity
                 onPress={() => setShowPassword(!showPassword)}
                 style={styles.eyeBtn}
+                accessibilityRole="button"
+                accessibilityLabel={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
               >
                 <Text style={styles.eyeText}>{showPassword ? '👁️' : '🙈'}</Text>
               </TouchableOpacity>
@@ -178,6 +195,16 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
               style={[
                 styles.loginBtn,
                 { backgroundColor: currentTheme.accent },
+                Platform.OS === 'web'
+                  ? ({
+                      backgroundImage: isPulsar
+                        ? `linear-gradient(90deg, ${currentTheme.gradientStart} 0%, #FF7B00 32%, ${currentTheme.gradientEnd} 100%)`
+                        : 'none',
+                      boxShadow: isPulsar
+                        ? '0 0 18px rgba(137, 242, 27, 0.45), 0 0 6px rgba(255, 94, 0, 0.35)'
+                        : 'none',
+                    } as any)
+                  : null,
                 isLoading && styles.loginBtnDisabled,
               ]}
             >
@@ -218,28 +245,27 @@ const styles = StyleSheet.create({
   },
   header: {
     alignItems: 'center',
-    marginBottom: 32,
+    marginBottom: 28,
+    width: '100%',
   },
-  logoBadge: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    borderWidth: 1.5,
-    justifyContent: 'center',
+  logoShowcase: {
     alignItems: 'center',
-    marginBottom: 16,
+    justifyContent: 'center',
+    marginBottom: 10,
   },
-  logoIcon: {
-    fontSize: 28,
+  logoShowcaseLight: {
+    backgroundColor: '#090D16',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderRadius: 18,
   },
-  brandTitle: {
-    fontSize: 28,
-    fontWeight: '900',
-    letterSpacing: 1.5,
+  heroLogoImage: {
+    width: 268,
+    height: 90,
   },
   brandSubtitle: {
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: '800',
     letterSpacing: 2,
     marginTop: 4,
   },

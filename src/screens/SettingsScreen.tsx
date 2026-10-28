@@ -58,6 +58,8 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   const [importText, setImportText] = useState('');
   const [backupStatus, setBackupStatus] = useState<string | null>(null);
 
+  const isPulsar = Boolean(currentTheme.hasBrandGradient);
+
   useEffect(() => {
     AuthService.getCurrentUser().then(setCurrentUser);
     const sub = AuthService.onAuthStateChange((user) => {
@@ -189,15 +191,22 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
       <View style={styles.header}>
         <Text style={[styles.title, { color: currentTheme.text }]}>Configurações & Nuvem</Text>
         <Text style={[styles.subtitle, { color: currentTheme.textSecondary }]}>
-          BeatSync PWA • Temas OLED, Supabase & Cloudflare
+          BeatSync PWA • Temas OLED, Pulsar (Cyber Lime), Supabase & Cloudflare
         </Text>
       </View>
 
       {/* Admin Panel Quick Access (if logged in as admin) */}
       {isAdmin && onOpenAdmin && (
-        <View style={[styles.card, { backgroundColor: currentTheme.card, borderColor: currentTheme.accent, borderWidth: 1.5 }]}>
+        <View
+          style={[
+            styles.card,
+            { backgroundColor: currentTheme.card, borderColor: currentTheme.accent, borderWidth: 1.5 },
+          ]}
+        >
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-            <Text style={[styles.cardHeader, { color: currentTheme.accent, marginBottom: 0 }]}>👑 PAINEL DE CONTROLE ADMIN</Text>
+            <Text style={[styles.cardHeader, { color: currentTheme.accent, marginBottom: 0 }]}>
+              👑 PAINEL DE CONTROLE ADMIN
+            </Text>
             <View style={{ backgroundColor: currentTheme.accent, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
               <Text style={{ color: '#000', fontSize: 9, fontWeight: '900' }}>ACESSO MASTER</Text>
             </View>
@@ -208,9 +217,21 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
           <TouchableOpacity
             activeOpacity={0.8}
             onPress={onOpenAdmin}
-            style={[styles.primaryBtn, { backgroundColor: currentTheme.accent }]}
+            style={[
+              styles.primaryBtn,
+              { backgroundColor: currentTheme.accent },
+              Platform.OS === 'web'
+                ? ({
+                    backgroundImage: isPulsar
+                      ? `linear-gradient(90deg, ${currentTheme.gradientStart} 0%, ${currentTheme.gradientEnd} 100%)`
+                      : 'none',
+                  } as any)
+                : null,
+            ]}
           >
-            <Text style={[styles.primaryBtnText, { color: currentTheme.isDark ? '#000000' : '#FFFFFF' }]}>Abrir Gestão de Convites & Usuários</Text>
+            <Text style={[styles.primaryBtnText, { color: currentTheme.isDark ? '#000000' : '#FFFFFF' }]}>
+              Abrir Gestão de Convites & Usuários
+            </Text>
           </TouchableOpacity>
         </View>
       )}
@@ -222,7 +243,19 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
         {currentUser ? (
           <View>
             <View style={styles.userInfoRow}>
-              <View style={[styles.userAvatar, { backgroundColor: currentTheme.accent }]}>
+              <View
+                style={[
+                  styles.userAvatar,
+                  { backgroundColor: currentTheme.accent },
+                  Platform.OS === 'web'
+                    ? ({
+                        backgroundImage: isPulsar
+                          ? `linear-gradient(135deg, ${currentTheme.gradientStart} 0%, ${currentTheme.gradientEnd} 100%)`
+                          : 'none',
+                      } as any)
+                    : null,
+                ]}
+              >
                 <Text style={[styles.userAvatarText, { color: currentTheme.isDark ? '#000000' : '#FFFFFF' }]}>
                   {(currentUser.email || 'M').charAt(0).toUpperCase()}
                 </Text>
@@ -239,12 +272,24 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               <TouchableOpacity
                 onPress={handleSyncToCloud}
                 disabled={isSyncing}
-                style={[styles.syncBtn, { backgroundColor: currentTheme.accent }]}
+                style={[
+                  styles.syncBtn,
+                  { backgroundColor: currentTheme.accent },
+                  Platform.OS === 'web'
+                    ? ({
+                        backgroundImage: isPulsar
+                          ? `linear-gradient(90deg, ${currentTheme.gradientStart} 0%, ${currentTheme.gradientEnd} 100%)`
+                          : 'none',
+                      } as any)
+                    : null,
+                ]}
               >
                 {isSyncing ? (
                   <ActivityIndicator color="#000" size="small" />
                 ) : (
-                  <Text style={[styles.syncBtnText, { color: currentTheme.isDark ? '#000000' : '#FFFFFF' }]}>☁️ Sincronizar Músicas na Nuvem</Text>
+                  <Text style={[styles.syncBtnText, { color: currentTheme.isDark ? '#000000' : '#FFFFFF' }]}>
+                    ☁️ Sincronizar Músicas na Nuvem
+                  </Text>
                 )}
               </TouchableOpacity>
 
@@ -288,9 +333,21 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
             </Text>
             <TouchableOpacity
               onPress={() => setIsAuthModalVisible(true)}
-              style={[styles.loginBtn, { backgroundColor: currentTheme.accent }]}
+              style={[
+                styles.loginBtn,
+                { backgroundColor: currentTheme.accent },
+                Platform.OS === 'web'
+                  ? ({
+                      backgroundImage: isPulsar
+                        ? `linear-gradient(90deg, ${currentTheme.gradientStart} 0%, ${currentTheme.gradientEnd} 100%)`
+                        : 'none',
+                    } as any)
+                  : null,
+              ]}
             >
-              <Text style={[styles.loginBtnText, { color: currentTheme.isDark ? '#000000' : '#FFFFFF' }]}>Entrar ou Criar Conta com E-mail</Text>
+              <Text style={[styles.loginBtnText, { color: currentTheme.isDark ? '#000000' : '#FFFFFF' }]}>
+                Entrar ou Criar Conta com E-mail
+              </Text>
             </TouchableOpacity>
           </View>
         )}
@@ -304,7 +361,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               TEMAS & MODO DIURNO
             </Text>
             <Text style={[styles.cardDesc, { color: currentTheme.textSecondary, marginBottom: 0 }]}>
-              Padrão OLED Zero Luz (#000000) ou Tema Claro para ambientes diurnos.
+              Padrão OLED Zero Luz (#000000), Pulsar (Cyber Lime) ou Tema Claro diurno.
             </Text>
           </View>
 
@@ -342,6 +399,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
         <View style={[styles.themeGrid, { marginTop: 12 }]}>
           {themes.map((t) => {
             const isSelected = currentTheme.id === t.id;
+            const isCardPulsar = Boolean(t.hasBrandGradient);
             return (
               <TouchableOpacity
                 key={t.id}
@@ -354,23 +412,60 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                   styles.themeCard,
                   {
                     backgroundColor: t.background,
-                    borderColor: isSelected ? t.accent : currentTheme.border,
+                    borderColor: isSelected ? t.accent : t.border,
                   },
                   isSelected && { borderWidth: 2 },
+                  Platform.OS === 'web'
+                    ? ({
+                        boxShadow:
+                          isSelected && isCardPulsar
+                            ? '0 0 18px rgba(137, 242, 27, 0.35), 0 0 8px rgba(255, 94, 0, 0.25)'
+                            : 'none',
+                      } as any)
+                    : null,
                 ]}
               >
                 <View style={styles.themeCardHeader}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <View
-                      style={[
-                        styles.themeColorDot,
-                        { backgroundColor: t.accent },
-                      ]}
-                    />
+                    {isCardPulsar ? (
+                      <View style={styles.dualDotsRow}>
+                        <View
+                          style={[
+                            styles.themeColorDot,
+                            { backgroundColor: t.gradientStart || t.accentSecondary },
+                          ]}
+                        />
+                        <View
+                          style={[
+                            styles.themeColorDot,
+                            { backgroundColor: t.gradientEnd || t.accent, marginLeft: -4 },
+                          ]}
+                        />
+                      </View>
+                    ) : (
+                      <View
+                        style={[
+                          styles.themeColorDot,
+                          { backgroundColor: t.accent },
+                        ]}
+                      />
+                    )}
                     <Text style={[styles.themeName, { color: t.text }]}>{t.name}</Text>
                   </View>
                   {isSelected && (
-                    <View style={[styles.activePill, { backgroundColor: t.accent }]}>
+                    <View
+                      style={[
+                        styles.activePill,
+                        { backgroundColor: t.accent },
+                        Platform.OS === 'web'
+                          ? ({
+                              backgroundImage: isCardPulsar
+                                ? `linear-gradient(90deg, ${t.gradientStart} 0%, ${t.gradientEnd} 100%)`
+                                : 'none',
+                            } as any)
+                          : null,
+                      ]}
+                    >
                       <Text
                         style={[
                           styles.activePillText,
@@ -409,15 +504,25 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 accessibilityRole="button"
                 accessibilityState={{ selected: isSelected }}
                 accessibilityLabel={`Selecionar timbre padrão ${soundOpt.label}`}
-                style={{
-                  flex: 1,
-                  borderRadius: 10,
-                  borderWidth: 1,
-                  paddingVertical: 10,
-                  alignItems: 'center',
-                  backgroundColor: isSelected ? currentTheme.accent : currentTheme.cardElevated,
-                  borderColor: isSelected ? currentTheme.accent : currentTheme.border,
-                }}
+                style={[
+                  {
+                    flex: 1,
+                    borderRadius: 10,
+                    borderWidth: 1,
+                    paddingVertical: 10,
+                    alignItems: 'center',
+                    backgroundColor: isSelected ? currentTheme.accent : currentTheme.cardElevated,
+                    borderColor: isSelected ? currentTheme.accent : currentTheme.border,
+                  },
+                  Platform.OS === 'web'
+                    ? ({
+                        backgroundImage:
+                          isSelected && isPulsar
+                            ? `linear-gradient(135deg, ${currentTheme.gradientStart} 0%, ${currentTheme.gradientEnd} 100%)`
+                            : 'none',
+                      } as any)
+                    : null,
+                ]}
               >
                 <Text
                   style={{
@@ -494,9 +599,21 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
         <TouchableOpacity
           activeOpacity={0.8}
           onPress={handleExportBackup}
-          style={[styles.primaryBtn, { backgroundColor: currentTheme.accent }]}
+          style={[
+            styles.primaryBtn,
+            { backgroundColor: currentTheme.accent },
+            Platform.OS === 'web'
+              ? ({
+                  backgroundImage: isPulsar
+                    ? `linear-gradient(90deg, ${currentTheme.gradientStart} 0%, ${currentTheme.gradientEnd} 100%)`
+                    : 'none',
+                } as any)
+              : null,
+          ]}
         >
-          <Text style={[styles.primaryBtnText, { color: currentTheme.isDark ? '#000000' : '#FFFFFF' }]}>Gerar Backup JSON</Text>
+          <Text style={[styles.primaryBtnText, { color: currentTheme.isDark ? '#000000' : '#FFFFFF' }]}>
+            Gerar Backup JSON
+          </Text>
         </TouchableOpacity>
 
         {backupStatus && (
@@ -505,7 +622,10 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
 
         {backupText.length > 0 && (
           <TextInput
-            style={[styles.jsonBox, { backgroundColor: currentTheme.cardElevated, borderColor: currentTheme.border, color: currentTheme.text }]}
+            style={[
+              styles.jsonBox,
+              { backgroundColor: currentTheme.cardElevated, borderColor: currentTheme.border, color: currentTheme.text },
+            ]}
             multiline
             editable={false}
             value={backupText}
@@ -517,7 +637,10 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
 
         <Text style={[styles.sectionSubtitle, { color: currentTheme.text }]}>Restaurar de um Backup JSON:</Text>
         <TextInput
-          style={[styles.inputJson, { backgroundColor: currentTheme.cardElevated, borderColor: currentTheme.border, color: currentTheme.text }]}
+          style={[
+            styles.inputJson,
+            { backgroundColor: currentTheme.cardElevated, borderColor: currentTheme.border, color: currentTheme.text },
+          ]}
           placeholder="Cole aqui o texto JSON do backup..."
           placeholderTextColor={currentTheme.textMuted}
           multiline
@@ -529,7 +652,10 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
         <TouchableOpacity
           activeOpacity={0.8}
           onPress={handleImportBackup}
-          style={[styles.secondaryBtn, { backgroundColor: currentTheme.cardElevated, borderColor: currentTheme.border }]}
+          style={[
+            styles.secondaryBtn,
+            { backgroundColor: currentTheme.cardElevated, borderColor: currentTheme.border },
+          ]}
         >
           <Text style={[styles.secondaryBtnText, { color: currentTheme.text }]}>Importar Backup</Text>
         </TouchableOpacity>
@@ -719,6 +845,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 4,
   },
+  dualDotsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   themeColorDot: {
     width: 12,
     height: 12,
@@ -810,15 +940,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 8,
     padding: 10,
-    fontSize: 11,
-    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    fontSize: 12,
     marginBottom: 10,
-    height: 60,
+    minHeight: 70,
+    textAlignVertical: 'top',
   },
   secondaryBtn: {
-    borderRadius: 10,
     borderWidth: 1,
-    paddingVertical: 12,
+    borderRadius: 10,
+    paddingVertical: 11,
     alignItems: 'center',
   },
   secondaryBtnText: {
@@ -828,23 +958,24 @@ const styles = StyleSheet.create({
   dangerBtn: {
     borderWidth: 1,
     borderRadius: 10,
-    paddingVertical: 12,
+    paddingVertical: 11,
     alignItems: 'center',
   },
   dangerBtnText: {
     fontSize: 13,
-    fontWeight: '700',
+    fontWeight: '800',
   },
   footer: {
     alignItems: 'center',
-    paddingVertical: 20,
+    marginTop: 10,
+    marginBottom: 20,
   },
   footerText: {
     fontSize: 12,
     fontWeight: '700',
   },
   footerSub: {
-    fontSize: 10,
-    marginTop: 4,
+    fontSize: 11,
+    marginTop: 2,
   },
 });

@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 import { BeatState } from '../types';
 import { useTheme } from '../theme/ThemeContext';
 
@@ -17,6 +17,9 @@ interface BeatDotProps {
   state: BeatState;
   isCompact: boolean;
   isDark: boolean;
+  isPulsar: boolean;
+  accentColor: string;
+  accentSecondary: string;
   textSecondary: string;
   onToggle: (index: number) => void;
 }
@@ -31,29 +34,71 @@ const STATE_NAMES: Record<BeatState, string> = {
 const HIT_SLOP = { top: 6, bottom: 6, left: 4, right: 4 };
 
 const BeatDot: React.FC<BeatDotProps> = React.memo(
-  ({ index, isActive, state, isCompact, isDark, textSecondary, onToggle }) => {
+  ({
+    index,
+    isActive,
+    state,
+    isCompact,
+    isDark,
+    isPulsar,
+    accentColor,
+    accentSecondary,
+    textSecondary,
+    onToggle,
+  }) => {
     let stateColor = isDark ? '#1E293B' : '#E2E8F0';
-    let activeColor = '#00E5FF';
+    let dotBorderColor = 'transparent';
+    let activeColor = accentColor;
     let symbolColor = '#FFFFFF';
     let labelSymbol = '●';
 
-    if (state === 'accent') {
-      stateColor = isDark ? '#991B1B' : '#DC2626';
-      activeColor = '#FF1744';
-      labelSymbol = '▲';
-    } else if (state === 'normal') {
-      stateColor = isDark ? '#1D4ED8' : '#2563EB';
-      activeColor = isDark ? '#00E5FF' : '#0284C7';
-      labelSymbol = '●';
-    } else if (state === 'ghost') {
-      stateColor = isDark ? '#334155' : '#64748B';
-      activeColor = isDark ? '#94A3B8' : '#475569';
-      labelSymbol = '◦';
-    } else if (state === 'mute') {
-      stateColor = isDark ? '#14141B' : '#CBD5E1';
-      activeColor = isDark ? '#3F3F46' : '#94A3B8';
-      symbolColor = isDark ? '#71717A' : '#475569';
-      labelSymbol = '✕';
+    if (isPulsar) {
+      // Pulsar (Cyber Lime) theme: Orange & Cyber-Lime idle palette, brilliant Cyber-Lime active pulse
+      if (state === 'accent') {
+        stateColor = '#331200';
+        dotBorderColor = accentSecondary; // #FF5E00
+        activeColor = '#89F21B';
+        symbolColor = isActive ? '#000000' : '#FF7700';
+        labelSymbol = '▲';
+      } else if (state === 'normal') {
+        stateColor = '#112204';
+        dotBorderColor = '#457D0E';
+        activeColor = '#89F21B';
+        symbolColor = isActive ? '#000000' : '#89F21B';
+        labelSymbol = '●';
+      } else if (state === 'ghost') {
+        stateColor = '#0A1403';
+        dotBorderColor = '#2A4510';
+        activeColor = '#A3E635';
+        symbolColor = isActive ? '#000000' : '#6E9938';
+        labelSymbol = '◦';
+      } else if (state === 'mute') {
+        stateColor = '#070A05';
+        dotBorderColor = '#1B2B0B';
+        activeColor = '#2A4510';
+        symbolColor = '#425C24';
+        labelSymbol = '✕';
+      }
+    } else {
+      if (state === 'accent') {
+        stateColor = isDark ? '#991B1B' : '#DC2626';
+        activeColor = '#FF1744';
+        labelSymbol = '▲';
+      } else if (state === 'normal') {
+        stateColor = isDark ? '#1D4ED8' : '#2563EB';
+        activeColor = accentColor;
+        symbolColor = isActive && isDark ? '#000000' : '#FFFFFF';
+        labelSymbol = '●';
+      } else if (state === 'ghost') {
+        stateColor = isDark ? '#334155' : '#64748B';
+        activeColor = isDark ? '#94A3B8' : '#475569';
+        labelSymbol = '◦';
+      } else if (state === 'mute') {
+        stateColor = isDark ? '#14141B' : '#CBD5E1';
+        activeColor = isDark ? '#3F3F46' : '#94A3B8';
+        symbolColor = isDark ? '#71717A' : '#475569';
+        labelSymbol = '✕';
+      }
     }
 
     const circleSize = isCompact ? 24 : 28;
@@ -69,9 +114,13 @@ const BeatDot: React.FC<BeatDotProps> = React.memo(
         accessibilityState={{ selected: isActive }}
         style={[
           styles.dotWrapper,
-          isActive && {
-            transform: [{ scale: 1.14 }],
-            borderColor: activeColor,
+          {
+            borderColor: isActive
+              ? isPulsar
+                ? '#B2FD0D'
+                : activeColor
+              : 'transparent',
+            transform: [{ scale: isActive ? 1.15 : 1 }],
           },
         ]}
       >
@@ -83,7 +132,19 @@ const BeatDot: React.FC<BeatDotProps> = React.memo(
               height: circleSize,
               borderRadius,
               backgroundColor: isActive ? activeColor : stateColor,
+              borderWidth: isPulsar ? 1.5 : 0,
+              borderColor: isActive ? '#B2FD0D' : dotBorderColor,
             },
+            Platform.OS === 'web'
+              ? ({
+                  boxShadow:
+                    isActive && isPulsar
+                      ? '0 0 18px rgba(137, 242, 27, 0.95), 0 0 7px rgba(255, 94, 0, 0.6)'
+                      : isActive
+                      ? `0 0 10px ${activeColor}88`
+                      : 'none',
+                } as any)
+              : null,
           ]}
         >
           <Text style={[styles.symbolText, { color: symbolColor }]}>{labelSymbol}</Text>
@@ -108,6 +169,7 @@ export const BeatVisualizer: React.FC<BeatVisualizerProps> = React.memo(
   ({ numerator, currentBeat, accentPattern, onToggleBeatState, isRunning }) => {
     const { currentTheme, isDark } = useTheme();
     const isCompact = numerator > 6;
+    const isPulsar = Boolean(currentTheme.hasBrandGradient);
 
     return (
       <View style={styles.container}>
@@ -123,6 +185,9 @@ export const BeatVisualizer: React.FC<BeatVisualizerProps> = React.memo(
                 state={state}
                 isCompact={isCompact}
                 isDark={isDark}
+                isPulsar={isPulsar}
+                accentColor={currentTheme.accent}
+                accentSecondary={currentTheme.accentSecondary}
                 textSecondary={currentTheme.textSecondary}
                 onToggle={onToggleBeatState}
               />
@@ -130,8 +195,25 @@ export const BeatVisualizer: React.FC<BeatVisualizerProps> = React.memo(
           })}
         </View>
         <Text style={[styles.legend, { color: currentTheme.textMuted }]} numberOfLines={1}>
-          Toque no tempo: <Text style={styles.legendAccent}>▲ Forte</Text> •{' '}
-          <Text style={styles.legendNormal}>● Normal</Text> • ◦ Suave • ✕ Mudo
+          Toque no tempo:{' '}
+          <Text
+            style={[
+              styles.legendAccent,
+              isPulsar && { color: currentTheme.accentSecondary },
+            ]}
+          >
+            ▲ Forte
+          </Text>{' '}
+          •{' '}
+          <Text
+            style={[
+              styles.legendNormal,
+              isPulsar && { color: currentTheme.accent },
+            ]}
+          >
+            ● Normal
+          </Text>{' '}
+          • ◦ Suave • ✕ Mudo
         </Text>
       </View>
     );
