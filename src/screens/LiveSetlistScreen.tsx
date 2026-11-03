@@ -78,9 +78,9 @@ export const LiveSetlistScreen: React.FC<LiveSetlistScreenProps> = ({
     }
   }, [currentIndex, currentSong]);
 
-  // Audio callback
+  // Audio callback and cleanup on unmount / exit from Live Setlist
   useEffect(() => {
-    audioEngine.onBeatCallback = (beatIndex, isDownbeat) => {
+    const beatHandler = (beatIndex: number, isDownbeat: boolean) => {
       setCurrentBeat(beatIndex);
       if (isDownbeat) {
         setIsFlashActive(true);
@@ -89,9 +89,14 @@ export const LiveSetlistScreen: React.FC<LiveSetlistScreenProps> = ({
       }
     };
 
+    audioEngine.onBeatCallback = beatHandler;
+
     return () => {
-      audioEngine.onBeatCallback = null;
+      if (audioEngine.onBeatCallback === beatHandler) {
+        audioEngine.onBeatCallback = null;
+      }
       if (flashTimeoutRef.current) clearTimeout(flashTimeoutRef.current);
+      audioEngine.suspendContext();
     };
   }, []);
 

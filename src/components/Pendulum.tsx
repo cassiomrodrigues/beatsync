@@ -12,25 +12,31 @@ export const Pendulum: React.FC<PendulumProps> = ({ isRunning, bpm, currentBeat 
 
   useEffect(() => {
     if (!isRunning) {
-      Animated.timing(swingAnim, {
+      const stopAnim = Animated.timing(swingAnim, {
         toValue: 0,
         duration: 300,
         easing: Easing.out(Easing.quad),
         useNativeDriver: true,
-      }).start();
-      return;
+      });
+      stopAnim.start();
+      return () => stopAnim.stop();
     }
 
     const direction = currentBeat % 2 === 0 ? 1 : -1;
     const beatDurationMs = (60 / bpm) * 1000;
 
-    Animated.timing(swingAnim, {
+    const swingAnimation = Animated.timing(swingAnim, {
       toValue: direction,
       duration: Math.min(beatDurationMs * 0.9, 450),
       easing: Easing.bezier(0.25, 0.1, 0.25, 1.0),
       useNativeDriver: true,
-    }).start();
-  }, [isRunning, currentBeat, bpm]);
+    });
+    swingAnimation.start();
+
+    return () => {
+      swingAnimation.stop();
+    };
+  }, [isRunning, currentBeat, bpm, swingAnim]);
 
   const rotation = swingAnim.interpolate({
     inputRange: [-1, 0, 1],

@@ -71,7 +71,18 @@ export const SongsScreen: React.FC<SongsScreenProps> = ({
   const [isLoadingShared, setIsLoadingShared] = useState(false);
   const [globalError, setGlobalError] = useState<string | null>(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const isMountedRef = useRef(true);
   const globalRequestIdRef = useRef(0);
+  const sharedRequestIdRef = useRef(0);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      globalRequestIdRef.current++;
+      sharedRequestIdRef.current++;
+    };
+  }, []);
 
   const loadGlobalSongs = useCallback(async () => {
     const requestId = ++globalRequestIdRef.current;
@@ -79,49 +90,60 @@ export const SongsScreen: React.FC<SongsScreenProps> = ({
     setGlobalError(null);
     try {
       const list = await CloudLibraryService.fetchGlobalSongs();
-      // Ignore stale responses from superseded requests
-      if (requestId === globalRequestIdRef.current) {
+      // Ignore stale responses from superseded requests or unmounted component
+      if (isMountedRef.current && requestId === globalRequestIdRef.current) {
         setGlobalSongs(list);
       }
     } catch (e: unknown) {
       console.warn('Erro ao carregar músicas globais:', e);
-      if (requestId === globalRequestIdRef.current) {
+      if (isMountedRef.current && requestId === globalRequestIdRef.current) {
         setGlobalError('Não foi possível carregar a Biblioteca Global. Verifique sua conexão e tente novamente.');
       }
     } finally {
-      if (requestId === globalRequestIdRef.current) {
+      if (isMountedRef.current && requestId === globalRequestIdRef.current) {
         setIsLoadingGlobal(false);
       }
     }
   }, []);
 
   const loadSharedSongs = useCallback(async () => {
+    const requestId = ++sharedRequestIdRef.current;
     setIsLoadingShared(true);
     try {
       const list = await CloudLibraryService.fetchSharedWithMe();
-      setSharedSongs(list);
+      if (isMountedRef.current && requestId === sharedRequestIdRef.current) {
+        setSharedSongs(list);
+      }
     } catch (e: unknown) {
       console.warn('Erro ao carregar compartilhadas:', e);
     } finally {
-      setIsLoadingShared(false);
+      if (isMountedRef.current && requestId === sharedRequestIdRef.current) {
+        setIsLoadingShared(false);
+      }
     }
   }, []);
 
   useEffect(() => {
+    let active = true;
+
     AuthService.getCurrentUser().then((user) => {
+      if (!active || !isMountedRef.current) return;
       setIsLoggedIn(Boolean(user));
     });
 
     const sub = AuthService.onAuthStateChange((user) => {
+      if (!active || !isMountedRef.current) return;
       setIsLoggedIn(Boolean(user));
       if (user) {
         loadSharedSongs();
       } else {
+        sharedRequestIdRef.current++;
         setSharedSongs([]);
       }
     });
 
     return () => {
+      active = false;
       sub?.unsubscribe();
     };
   }, [loadSharedSongs]);
@@ -209,11 +231,14 @@ export const SongsScreen: React.FC<SongsScreenProps> = ({
     onSaveSong(importedSong);
     try {
       const uploaded = await CloudLibraryService.uploadSongToCloud(importedSong, false);
+      if (!isMountedRef.current) return;
       onSaveSong({ ...importedSong, cloudId: uploaded.cloudId, userId: uploaded.userId });
     } catch (e: unknown) {
       console.warn('Erro ao sincronizar música importada na nuvem:', e);
     }
-    alert(`"${song.title}" foi importada com sucesso para o seu repertório pessoal!`);
+    if (isMountedRef.current) {
+      alert(`"${song.title}" foi importada com sucesso para o seu repertório pessoal!`);
+    }
   };
 
   const handleSaveSongWithCloud = async (song: Song) => {
@@ -231,6 +256,7 @@ export const SongsScreen: React.FC<SongsScreenProps> = ({
 
     try {
       const uploaded = await CloudLibraryService.uploadSongToCloud(song, Boolean(song.isPublic));
+      if (!isMountedRef.current) return;
       // Persist the cloud UUID locally so future edits update the same row
       if (uploaded.cloudId !== song.cloudId) {
         onSaveSong({ ...song, cloudId: uploaded.cloudId, userId: uploaded.userId });
@@ -239,7 +265,9 @@ export const SongsScreen: React.FC<SongsScreenProps> = ({
       loadGlobalSongs();
     } catch (e: unknown) {
       console.warn('Erro ao sincronizar música na nuvem:', e);
-      alert('A música foi salva no dispositivo, mas não foi possível sincronizá-la com a nuvem. Tente novamente mais tarde.');
+      if (isMountedRef.current) {
+        alert('A música foi salva no dispositivo, mas não foi possível sincronizá-la com a nuvem. Tente novamente mais tarde.');
+      }
     }
   };
 

@@ -252,6 +252,7 @@ interface ThemeContextType {
   setFlashEnabledPref: (enabled: boolean) => Promise<void>;
   setHapticsEnabledPref: (enabled: boolean) => Promise<void>;
   syncSettingsFromCloud: (userId?: string) => Promise<void>;
+  resetThemeAndPreferences: () => Promise<void>;
   themes: ThemeColors[];
 }
 
@@ -267,6 +268,7 @@ const ThemeContext = createContext<ThemeContextType>({
   setFlashEnabledPref: async () => {},
   setHapticsEnabledPref: async () => {},
   syncSettingsFromCloud: async () => {},
+  resetThemeAndPreferences: async () => {},
   themes: THEME_LIST,
 });
 
@@ -277,14 +279,52 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [flashEnabled, setFlashEnabledState] = useState<boolean>(true);
   const [hapticsEnabled, setHapticsEnabledState] = useState<boolean>(true);
   const activeUserIdRef = useRef<string | undefined>(undefined);
+  const isMountedRef = useRef<boolean>(true);
+  const syncRequestIdRef = useRef<number>(0);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  const resetThemeAndPreferences = useCallback(async () => {
+    syncRequestIdRef.current++;
+    activeUserIdRef.current = undefined;
+    if (isMountedRef.current) {
+      setThemeIdState('oled_zero');
+      setDefaultSoundTypeState('woodblock');
+      setFlashEnabledState(true);
+      setHapticsEnabledState(true);
+    }
+    syncDocumentTheme(THEMES.oled_zero);
+    try {
+      await Promise.all([
+        AsyncStorage.removeItem(THEME_STORAGE_KEY),
+        AsyncStorage.removeItem(SOUND_STORAGE_KEY),
+      ]);
+    } catch {
+      // Ignore local storage removal errors
+    }
+  }, []);
 
   const syncSettingsFromCloud = useCallback(async (userId?: string) => {
+    const requestId = ++syncRequestIdRef.current;
     try {
+      const targetUserId = userId || activeUserIdRef.current;
       if (userId) {
         activeUserIdRef.current = userId;
       }
-      const remoteSettings = await CloudLibraryService.fetchUserSettings(userId || activeUserIdRef.current);
-      if (!remoteSettings) return;
+      const remoteSettings = await CloudLibraryService.fetchUserSettings(targetUserId);
+      if (
+        !remoteSettings ||
+        !isMountedRef.current ||
+        requestId !== syncRequestIdRef.current ||
+        (activeUserIdRef.current && activeUserIdRef.current !== remoteSettings.userId)
+      ) {
+        return;
+      }
 
       activeUserIdRef.current = remoteSettings.userId;
 
@@ -295,6 +335,8 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         await AsyncStorage.setItem(THEME_STORAGE_KEY, resolvedId);
       }
 
+      if (!isMountedRef.current || requestId !== syncRequestIdRef.current) return;
+
       if (
         remoteSettings.defaultSoundType &&
         VALID_SOUNDS.includes(remoteSettings.defaultSoundType)
@@ -302,6 +344,8 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         setDefaultSoundTypeState(remoteSettings.defaultSoundType);
         await AsyncStorage.setItem(SOUND_STORAGE_KEY, remoteSettings.defaultSoundType);
       }
+
+      if (!isMountedRef.current || requestId !== syncRequestIdRef.current) return;
 
       setFlashEnabledState(remoteSettings.flashEnabled);
       setHapticsEnabledState(remoteSettings.hapticsEnabled);
@@ -454,6 +498,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       setFlashEnabledPref,
       setHapticsEnabledPref,
       syncSettingsFromCloud,
+      resetThemeAndPreferences,
       themes: THEME_LIST,
     }),
     [
@@ -467,6 +512,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       setFlashEnabledPref,
       setHapticsEnabledPref,
       syncSettingsFromCloud,
+      resetThemeAndPreferences,
     ]
   );
 

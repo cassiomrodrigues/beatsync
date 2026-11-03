@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   SafeAreaView,
   View,
@@ -16,6 +16,7 @@ import './src/theme/global.css';
 import { AppIcon } from './src/components/AppIcon';
 import { Song, Playlist } from './src/types';
 import { StorageService } from './src/storage/storage';
+import { audioEngine } from './src/audio/audioEngine';
 import { MetronomeScreen } from './src/screens/MetronomeScreen';
 import { SongsScreen } from './src/screens/SongsScreen';
 import { PlaylistsScreen } from './src/screens/PlaylistsScreen';
@@ -33,7 +34,7 @@ const HORIZONTAL_LOGO = require('./assets/logo-horizontal.png');
 type TabType = 'metronome' | 'songs' | 'playlists' | 'live' | 'settings' | 'admin';
 
 function AppContent() {
-  const { currentTheme, syncSettingsFromCloud } = useTheme();
+  const { currentTheme, syncSettingsFromCloud, resetThemeAndPreferences } = useTheme();
   const [authSession, setAuthSession] = useState<AuthSession | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
 
@@ -43,6 +44,16 @@ function AppContent() {
   const [currentSong, setCurrentSong] = useState<Song | null>(null);
   const [activeLivePlaylist, setActiveLivePlaylist] = useState<Playlist | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  const isMountedRef = useRef<boolean>(true);
+  const loadDataRequestIdRef = useRef<number>(0);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   // Check authentication session on mount and subscribe to Supabase Auth changes
   useEffect(() => {
@@ -57,7 +68,14 @@ function AppContent() {
     const sub = AuthService.onAuthStateChange((user) => {
       if (!isMounted) return;
       if (!user) {
+        loadDataRequestIdRef.current++;
+        audioEngine.destroyContext();
         setAuthSession(null);
+        setSongs([]);
+        setPlaylists([]);
+        setCurrentSong(null);
+        setActiveLivePlaylist(null);
+        setActiveTab('metronome');
       }
     });
 
@@ -69,6 +87,7 @@ function AppContent() {
 
   // Load local + cloud data in parallel on startup / login (avoids waterfalls)
   const loadData = useCallback(async () => {
+    const requestId = ++loadDataRequestIdRef.current;
     try {
       const [localSongs, localPlaylists, cloudSongs, cloudPlaylists] = await Promise.all([
         StorageService.getSongs(),
@@ -76,6 +95,8 @@ function AppContent() {
         CloudLibraryService.fetchMySongs().catch(() => [] as Song[]),
         CloudLibraryService.fetchMyPlaylists().catch(() => [] as Playlist[]),
       ]);
+
+      if (!isMountedRef.current || requestId !== loadDataRequestIdRef.current) return;
 
       // Merge cloud songs with local songs (deduplicating by cloudId or id)
       let mergedSongs = localSongs;
@@ -91,6 +112,8 @@ function AppContent() {
         await StorageService.setSongs(mergedSongs);
       }
 
+      if (!isMountedRef.current || requestId !== loadDataRequestIdRef.current) return;
+
       // Merge cloud playlists with local playlists
       let mergedPlaylists = localPlaylists;
       if (cloudPlaylists.length > 0) {
@@ -105,12 +128,16 @@ function AppContent() {
         await StorageService.setPlaylists(mergedPlaylists);
       }
 
+      if (!isMountedRef.current || requestId !== loadDataRequestIdRef.current) return;
+
       setSongs(mergedSongs);
       setPlaylists(mergedPlaylists);
     } catch (err) {
       console.error('Falha ao carregar dados:', err);
     } finally {
-      setIsLoading(false);
+      if (isMountedRef.current && requestId === loadDataRequestIdRef.current) {
+        setIsLoading(false);
+      }
     }
   }, []);
 
@@ -122,11 +149,28 @@ function AppContent() {
     }
   }, [authSession?.userId, loadData, syncSettingsFromCloud]);
 
-  const handleLogout = async () => {
-    await AuthGuardService.logout();
+  const handleLogout = useCallback(async () => {
+    // 1. Invalidate any in-flight data requests
+    loadDataRequestIdRef.current++;
+
+    // 2. Force stop playback and explicitly destroy AudioContext & scheduled nodes
+    audioEngine.destroyContext();
+
+    // 3. Reset all global application states in memory
     setAuthSession(null);
+    setSongs([]);
+    setPlaylists([]);
+    setCurrentSong(null);
+    setActiveLivePlaylist(null);
     setActiveTab('metronome');
-  };
+
+    // 4. Clear persistent session, local cache, and reset ThemeContext preferences
+    await Promise.all([
+      AuthGuardService.logout(),
+      StorageService.clearSessionCache(),
+      resetThemeAndPreferences(),
+    ]);
+  }, [resetThemeAndPreferences]);
 
   const confirmLogout = () => {
     if (Platform.OS === 'web') {
@@ -148,6 +192,7 @@ function AppContent() {
   // CRUD SONG HANDLERS
   const handleSaveSong = useCallback(async (song: Song) => {
     const updated = await StorageService.saveSong(song);
+    if (!isMountedRef.current) return;
     setSongs(updated);
     setCurrentSong((prev) => (prev && prev.id === song.id ? song : prev));
   }, []);
@@ -155,6 +200,7 @@ function AppContent() {
   const handleCreateSongFromMetronome = useCallback(
     async (song: Song) => {
       const updated = await StorageService.saveSong(song);
+      if (!isMountedRef.current) return;
       setSongs(updated);
       setCurrentSong(song);
 
@@ -165,6 +211,7 @@ function AppContent() {
           song,
           Boolean(song.isPublic)
         );
+        if (!isMountedRef.current) return;
         if (uploaded.cloudId !== song.cloudId || uploaded.userId !== song.userId) {
           const syncedSong: Song = {
             ...song,
@@ -172,6 +219,7 @@ function AppContent() {
             userId: uploaded.userId,
           };
           const syncedList = await StorageService.saveSong(syncedSong);
+          if (!isMountedRef.current) return;
           setSongs(syncedList);
           setCurrentSong((prev) => (prev?.id === song.id ? syncedSong : prev));
         }
@@ -185,8 +233,10 @@ function AppContent() {
   const handleDeleteSong = async (songId: string) => {
     const targetSong = songs.find((s) => s.id === songId);
     const updated = await StorageService.deleteSong(songId);
+    if (!isMountedRef.current) return;
     setSongs(updated);
     const updatedPlaylists = await StorageService.getPlaylists();
+    if (!isMountedRef.current) return;
     setPlaylists(updatedPlaylists);
     if (currentSong && currentSong.id === songId) {
       setCurrentSong(null);
@@ -216,9 +266,11 @@ function AppContent() {
   const syncPlaylistToCloudAsync = useCallback(async (playlist: Playlist) => {
     try {
       const uploaded = await CloudLibraryService.uploadPlaylistToCloud(playlist);
+      if (!isMountedRef.current) return;
       if (uploaded.cloudId !== playlist.cloudId || uploaded.userId !== playlist.userId) {
         const synced = { ...playlist, cloudId: uploaded.cloudId, userId: uploaded.userId };
         const updatedList = await StorageService.savePlaylist(synced);
+        if (!isMountedRef.current) return;
         setPlaylists(updatedList);
       }
     } catch (e) {
@@ -229,6 +281,7 @@ function AppContent() {
   // CRUD PLAYLIST HANDLERS
   const handleSavePlaylist = async (playlist: Playlist) => {
     const updated = await StorageService.savePlaylist(playlist);
+    if (!isMountedRef.current) return;
     setPlaylists(updated);
     await syncPlaylistToCloudAsync(playlist);
   };
@@ -236,6 +289,7 @@ function AppContent() {
   const handleDeletePlaylist = async (playlistId: string) => {
     const targetPlaylist = playlists.find((p) => p.id === playlistId);
     const updated = await StorageService.deletePlaylist(playlistId);
+    if (!isMountedRef.current) return;
     setPlaylists(updated);
     if (activeLivePlaylist && activeLivePlaylist.id === playlistId) {
       setActiveLivePlaylist(null);
@@ -249,6 +303,7 @@ function AppContent() {
 
   const handleAddSongToPlaylist = async (playlistId: string, songId: string) => {
     const updated = await StorageService.addSongToPlaylist(playlistId, songId);
+    if (!isMountedRef.current) return;
     setPlaylists(updated);
     alert('Música adicionada à playlist!');
     const target = updated.find((p) => p.id === playlistId);
@@ -259,6 +314,7 @@ function AppContent() {
 
   const handleRemoveSongFromPlaylist = async (playlistId: string, songIndex: number) => {
     const updated = await StorageService.removeSongFromPlaylist(playlistId, songIndex);
+    if (!isMountedRef.current) return;
     setPlaylists(updated);
     const target = updated.find((p) => p.id === playlistId);
     if (target) {
@@ -272,6 +328,7 @@ function AppContent() {
     toIndex: number
   ) => {
     const updated = await StorageService.reorderPlaylistSongs(playlistId, fromIndex, toIndex);
+    if (!isMountedRef.current) return;
     setPlaylists(updated);
     const target = updated.find((p) => p.id === playlistId);
     if (target) {
@@ -397,6 +454,8 @@ function AppContent() {
           ]}
         >
           <MetronomeScreen
+            key={authSession.userId}
+            isActive={activeTab === 'metronome'}
             currentSong={currentSong}
             onClearCurrentSong={handleClearCurrentSong}
             onOpenSongsTab={handleOpenSongsTab}

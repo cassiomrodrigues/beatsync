@@ -69,8 +69,10 @@ class AudioEngine {
   private nextNoteTime: number = 0;
   private timerId: ReturnType<typeof setInterval> | null = null;
   private pendingVisualTimers: Set<ReturnType<typeof setTimeout>> = new Set();
+  private activeAudioNodes: Set<AudioScheduledSourceNode> = new Set();
   private playbackGeneration: number = 0;
   private isUnlocked: boolean = false;
+  private unlockListenersAttached: boolean = false;
   private noiseBuffer: AudioBuffer | null = null;
   private lookaheadMs: number = 25; // How frequently to call scheduling (ms)
   private scheduleAheadTimeSec: number = 0.1; // How far ahead to schedule audio (sec)
@@ -89,6 +91,8 @@ class AudioEngine {
    */
   private setupGlobalInteractionUnlock() {
     if (typeof window === 'undefined' || typeof document === 'undefined') return;
+    if (this.unlockListenersAttached) return;
+    this.unlockListenersAttached = true;
 
     const unlockHandler = () => {
       this.initContextIfNeeded();
@@ -96,6 +100,7 @@ class AudioEngine {
         window.removeEventListener('pointerdown', unlockHandler, true);
         window.removeEventListener('touchstart', unlockHandler, true);
         window.removeEventListener('keydown', unlockHandler, true);
+        this.unlockListenersAttached = false;
       }
     };
 
@@ -107,6 +112,31 @@ class AudioEngine {
   private clearPendingVisualTimers() {
     this.pendingVisualTimers.forEach((id) => clearTimeout(id));
     this.pendingVisualTimers.clear();
+  }
+
+  private stopAllScheduledNodes() {
+    this.activeAudioNodes.forEach((node) => {
+      try {
+        node.onended = null;
+        node.stop(0);
+      } catch {
+        // Ignore if node already stopped
+      }
+      try {
+        node.disconnect();
+      } catch {
+        // Ignore disconnect errors
+      }
+    });
+    this.activeAudioNodes.clear();
+  }
+
+  private trackSourceNode(node: AudioScheduledSourceNode, cleanup: () => void) {
+    this.activeAudioNodes.add(node);
+    node.onended = () => {
+      this.activeAudioNodes.delete(node);
+      cleanup();
+    };
   }
 
   private initContextIfNeeded(): Promise<void> {
@@ -132,6 +162,9 @@ class AudioEngine {
         const source = this.audioCtx.createBufferSource();
         source.buffer = silentBuffer;
         source.connect(this.audioCtx.destination);
+        source.onended = () => {
+          source.disconnect();
+        };
         source.start(0);
         this.isUnlocked = true;
       } catch {
@@ -238,7 +271,6 @@ class AudioEngine {
   }
 
   public stop() {
-    if (!this.isRunning) return;
     this.isRunning = false;
     this.playbackGeneration++;
     if (this.timerId) {
@@ -246,11 +278,59 @@ class AudioEngine {
       this.timerId = null;
     }
     this.clearPendingVisualTimers();
+    this.stopAllScheduledNodes();
     this.currentBeatInMeasure = 0;
     this.currentSubdivisionIndex = 0;
 
     // Release screen wake lock when stopped
     releaseScreenWakeLock();
+  }
+
+  /**
+   * Suspends the Web Audio API context and halts any active scheduling when navigating
+   * away from metronome / live stage screens, freeing audio hardware threads.
+   */
+  public suspendContext() {
+    this.stop();
+    if (this.audioCtx && this.audioCtx.state === 'running') {
+      this.audioCtx.suspend().catch(() => {});
+    }
+  }
+
+  /**
+   * Explicitly destroys the AudioContext instance, clears all scheduled timers/nodes,
+   * and resets internal engine parameters to initial defaults (used on logout / session teardown).
+   */
+  public destroyContext() {
+    this.stop();
+    this.onBeatCallback = null;
+    this.onSubdivisionCallback = null;
+    this.noiseBuffer = null;
+
+    if (this.audioCtx) {
+      const ctxToClose = this.audioCtx;
+      this.audioCtx = null;
+      this.isUnlocked = false;
+      try {
+        ctxToClose.close().catch(() => {});
+      } catch {
+        // Ignore if context was already closed
+      }
+    }
+
+    // Reset engine parameters to clean defaults
+    this.bpm = 120;
+    this.numerator = 4;
+    this.denominator = 4;
+    this.subdivision = 1;
+    this.soundType = 'woodblock';
+    this.volume = 0.8;
+    this.isMuted = false;
+    this.hapticsEnabled = true;
+    this.accentPattern = ['accent', 'normal', 'normal', 'normal'];
+
+    // Re-arm interaction unlock for the next user session
+    this.setupGlobalInteractionUnlock();
   }
 
   public getIsRunning(): boolean {
@@ -427,10 +507,10 @@ class AudioEngine {
     osc.connect(gainNode);
     gainNode.connect(this.audioCtx.destination);
 
-    osc.onended = () => {
+    this.trackSourceNode(osc, () => {
       osc.disconnect();
       gainNode.disconnect();
-    };
+    });
 
     osc.start(time);
     osc.stop(time + 0.07);
@@ -460,11 +540,11 @@ class AudioEngine {
     filter.connect(gain);
     gain.connect(this.audioCtx.destination);
 
-    osc.onended = () => {
+    this.trackSourceNode(osc, () => {
       osc.disconnect();
       filter.disconnect();
       gain.disconnect();
-    };
+    });
 
     osc.start(time);
     osc.stop(time + 0.06);
@@ -489,10 +569,10 @@ class AudioEngine {
     osc.connect(oscGain);
     oscGain.connect(this.audioCtx.destination);
 
-    osc.onended = () => {
+    this.trackSourceNode(osc, () => {
       osc.disconnect();
       oscGain.disconnect();
-    };
+    });
 
     osc.start(time);
     osc.stop(time + 0.05);
@@ -517,11 +597,11 @@ class AudioEngine {
     noiseFilter.connect(noiseGain);
     noiseGain.connect(this.audioCtx.destination);
 
-    whiteNoise.onended = () => {
+    this.trackSourceNode(whiteNoise, () => {
       whiteNoise.disconnect();
       noiseFilter.disconnect();
       noiseGain.disconnect();
-    };
+    });
 
     whiteNoise.start(time);
     whiteNoise.stop(time + 0.03);
@@ -546,10 +626,10 @@ class AudioEngine {
     osc1.connect(gain1);
     gain1.connect(this.audioCtx.destination);
 
-    osc1.onended = () => {
+    this.trackSourceNode(osc1, () => {
       osc1.disconnect();
       gain1.disconnect();
-    };
+    });
 
     osc1.start(time);
     osc1.stop(time + 0.025);

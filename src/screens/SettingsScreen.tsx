@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -59,24 +59,34 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   const [backupStatus, setBackupStatus] = useState<string | null>(null);
 
   const isPulsar = Boolean(currentTheme.hasBrandGradient);
+  const isMountedRef = useRef(true);
 
   useEffect(() => {
-    AuthService.getCurrentUser().then(setCurrentUser);
+    isMountedRef.current = true;
+    AuthService.getCurrentUser().then((user) => {
+      if (isMountedRef.current) setCurrentUser(user);
+    });
     const sub = AuthService.onAuthStateChange((user) => {
-      setCurrentUser(user);
+      if (isMountedRef.current) setCurrentUser(user);
     });
     return () => {
+      isMountedRef.current = false;
       sub?.unsubscribe();
     };
   }, []);
 
   const handleSignOut = async () => {
     try {
-      await AuthService.signOut();
-      setCurrentUser(null);
-      alert('Sessão encerrada com sucesso.');
+      if (onLogout) {
+        await onLogout();
+      } else {
+        await AuthService.signOut();
+        if (isMountedRef.current) setCurrentUser(null);
+      }
     } catch (e: any) {
-      alert(`Erro ao sair: ${e.message}`);
+      if (isMountedRef.current) {
+        alert(`Erro ao sair: ${e.message}`);
+      }
     }
   };
 
@@ -94,8 +104,11 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
         StorageService.getPlaylists(),
       ]);
 
+      if (!isMountedRef.current) return;
+
       let songCount = 0;
       for (const song of localSongs) {
+        if (!isMountedRef.current) return;
         const uploaded = await CloudLibraryService.uploadSongToCloud(song, Boolean(song.isPublic));
         // Persist the cloud UUID locally so future syncs update instead of duplicating rows
         await StorageService.saveSong({ ...song, cloudId: uploaded.id, userId: uploaded.userId });
@@ -104,6 +117,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
 
       let playlistCount = 0;
       for (const playlist of localPlaylists) {
+        if (!isMountedRef.current) return;
         const uploadedPlaylist = await CloudLibraryService.uploadPlaylistToCloud(playlist);
         await StorageService.savePlaylist({
           ...playlist,
@@ -113,6 +127,8 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
         playlistCount++;
       }
 
+      if (!isMountedRef.current) return;
+
       await CloudLibraryService.saveUserSettings(
         {
           themeId: currentTheme.id,
@@ -121,25 +137,36 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
         currentUser.id
       );
 
+      if (!isMountedRef.current) return;
+
       onDataReset();
       await syncSettingsFromCloud(currentUser.id);
-      setSyncStatus(
-        `✅ ${songCount} músicas, ${playlistCount} playlists e suas configurações foram sincronizadas no Supabase!`
-      );
+      if (isMountedRef.current) {
+        setSyncStatus(
+          `✅ ${songCount} músicas, ${playlistCount} playlists e suas configurações foram sincronizadas no Supabase!`
+        );
+      }
     } catch (e: any) {
-      setSyncStatus(`❌ Falha na sincronização: ${e.message}`);
+      if (isMountedRef.current) {
+        setSyncStatus(`❌ Falha na sincronização: ${e.message}`);
+      }
     } finally {
-      setIsSyncing(false);
+      if (isMountedRef.current) {
+        setIsSyncing(false);
+      }
     }
   };
 
   const handleExportBackup = async () => {
     try {
       const data = await StorageService.exportBackup();
+      if (!isMountedRef.current) return;
       setBackupText(data);
       setBackupStatus('✅ Backup gerado com sucesso! Copie o texto abaixo.');
     } catch (err: any) {
-      setBackupStatus(`❌ Erro ao exportar: ${err.message}`);
+      if (isMountedRef.current) {
+        setBackupStatus(`❌ Erro ao exportar: ${err.message}`);
+      }
     }
   };
 
@@ -150,6 +177,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
     }
 
     const res = await StorageService.importBackup(importText.trim());
+    if (!isMountedRef.current) return;
     if (res.success) {
       alert('Backup importado com sucesso!');
       setImportText('');
@@ -162,6 +190,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   const handleResetDefaults = async () => {
     const runReset = async () => {
       await StorageService.resetToDefaults();
+      if (!isMountedRef.current) return;
       onDataReset();
       alert('Biblioteca restaurada para o repertório inicial.');
     };
@@ -294,10 +323,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               </TouchableOpacity>
 
               <TouchableOpacity
-                onPress={() => {
-                  handleSignOut();
-                  if (onLogout) onLogout();
-                }}
+                onPress={handleSignOut}
                 style={[styles.signOutBtn, { borderColor: currentTheme.danger }]}
               >
                 <Text style={[styles.signOutBtnText, { color: currentTheme.danger }]}>Sair</Text>

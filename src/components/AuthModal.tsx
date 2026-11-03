@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Modal,
   View,
@@ -30,6 +30,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [displayName, setDisplayName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   const handleSubmit = async () => {
     setErrorMessage(null);
@@ -47,6 +55,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     try {
       if (isSignUp) {
         const data = await AuthService.signUp(cleanEmail, password, displayName);
+        if (!isMountedRef.current) return;
         if (data.user) {
           onSuccess(data.user);
           onClose();
@@ -55,12 +64,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         }
       } else {
         const data = await AuthService.signIn(cleanEmail, password);
+        if (!isMountedRef.current) return;
         if (data.user) {
           onSuccess(data.user);
           onClose();
         }
       }
     } catch (err: any) {
+      if (!isMountedRef.current) return;
       const msg = err.message || 'Falha ao autenticar.';
       if (msg.includes('Invalid login credentials')) {
         setErrorMessage('E-mail ou senha incorretos.');
@@ -70,7 +81,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         setErrorMessage(msg);
       }
     } finally {
-      setIsLoading(false);
+      if (isMountedRef.current) {
+        setIsLoading(false);
+      }
     }
   };
 

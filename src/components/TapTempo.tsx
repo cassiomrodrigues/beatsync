@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { TouchableOpacity, Text, StyleSheet, Animated, View, Platform } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 
@@ -12,6 +12,16 @@ export const TapTempo: React.FC<TapTempoProps> = React.memo(({ onTempoCalculated
   const tapTimes = useRef<number[]>([]);
   const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scaleAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    return () => {
+      if (resetTimer.current) {
+        clearTimeout(resetTimer.current);
+        resetTimer.current = null;
+      }
+      tapTimes.current = [];
+    };
+  }, []);
 
   const handleTap = useCallback(() => {
     const now = performance.now();

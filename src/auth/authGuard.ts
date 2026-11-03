@@ -201,7 +201,7 @@ export const AuthGuardService = {
   },
 
   /**
-   * Realiza logout limpando a sessão local e do Supabase Auth
+   * Realiza logout limpando a sessão local, cache de convites e do Supabase Auth
    */
   async logout(): Promise<void> {
     try {
@@ -209,7 +209,14 @@ export const AuthGuardService = {
     } catch {
       // Ignore network errors on signOut
     }
-    await AsyncStorage.removeItem(AUTH_STORAGE_KEY);
+    try {
+      await Promise.all([
+        AsyncStorage.removeItem(AUTH_STORAGE_KEY),
+        AsyncStorage.removeItem(INVITES_STORAGE_KEY),
+      ]);
+    } catch {
+      await AsyncStorage.removeItem(AUTH_STORAGE_KEY);
+    }
   },
 
   /**

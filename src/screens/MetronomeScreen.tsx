@@ -17,6 +17,7 @@ import { BeatState, Song, SoundType, Subdivision, TimeSignature } from '../types
 import { useTheme, ThemeColors } from '../theme/ThemeContext';
 
 interface MetronomeScreenProps {
+  isActive?: boolean;
   currentSong: Song | null;
   onClearCurrentSong: () => void;
   onOpenSongsTab: () => void;
@@ -113,6 +114,7 @@ PracticeTimerBadge.displayName = 'PracticeTimerBadge';
  * never re-render the parent MetronomeScreen, BPM display, steppers, or bottom selectors.
  */
 interface LiveBeatSectionProps {
+  isActive: boolean;
   numerator: number;
   accentPattern: BeatState[];
   onToggleBeatState: (index: number) => void;
@@ -122,7 +124,7 @@ interface LiveBeatSectionProps {
 }
 
 const LiveBeatSection: React.FC<LiveBeatSectionProps> = React.memo(
-  ({ numerator, accentPattern, onToggleBeatState, isRunning, flashEnabled, theme }) => {
+  ({ isActive, numerator, accentPattern, onToggleBeatState, isRunning, flashEnabled, theme }) => {
     const [currentBeat, setCurrentBeat] = useState(0);
     const [isFlashActive, setIsFlashActive] = useState(false);
     const flashTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -135,7 +137,9 @@ const LiveBeatSection: React.FC<LiveBeatSectionProps> = React.memo(
     }, [isRunning]);
 
     useEffect(() => {
-      audioEngine.onBeatCallback = (beatIndex, isDownbeat) => {
+      if (!isActive) return;
+
+      const beatHandler = (beatIndex: number, isDownbeat: boolean) => {
         setCurrentBeat(beatIndex);
         if (isDownbeat && flashEnabled) {
           setIsFlashActive(true);
@@ -146,11 +150,15 @@ const LiveBeatSection: React.FC<LiveBeatSectionProps> = React.memo(
         }
       };
 
+      audioEngine.onBeatCallback = beatHandler;
+
       return () => {
-        audioEngine.onBeatCallback = null;
+        if (audioEngine.onBeatCallback === beatHandler) {
+          audioEngine.onBeatCallback = null;
+        }
         if (flashTimeoutRef.current) clearTimeout(flashTimeoutRef.current);
       };
-    }, [flashEnabled]);
+    }, [isActive, flashEnabled]);
 
     const isPulsar = Boolean(theme.hasBrandGradient);
     const flashBackground = isPulsar
@@ -484,6 +492,7 @@ const BottomParametersContainer: React.FC<BottomParametersContainerProps> = Reac
 BottomParametersContainer.displayName = 'BottomParametersContainer';
 
 export const MetronomeScreen: React.FC<MetronomeScreenProps> = ({
+  isActive = true,
   currentSong,
   onClearCurrentSong,
   onOpenSongsTab,
@@ -507,6 +516,20 @@ export const MetronomeScreen: React.FC<MetronomeScreenProps> = ({
   const [flashEnabled, setFlashEnabled] = useState(cloudFlashEnabled);
   const [tsModalVisible, setTsModalVisible] = useState(false);
   const [isNewSongModalVisible, setIsNewSongModalVisible] = useState(false);
+
+  // Stop scheduling and suspend AudioContext when navigating away from MetronomeScreen or unmounting
+  useEffect(() => {
+    if (!isActive) {
+      setIsRunning(false);
+      audioEngine.suspendContext();
+    }
+  }, [isActive]);
+
+  useEffect(() => {
+    return () => {
+      audioEngine.suspendContext();
+    };
+  }, []);
 
   // Sync default sound type and flash preference when user_settings load from Supabase
   useEffect(() => {
@@ -923,6 +946,7 @@ export const MetronomeScreen: React.FC<MetronomeScreenProps> = ({
 
         {/* 4. Compact Beat Visualizer */}
         <LiveBeatSection
+          isActive={isActive}
           numerator={timeSignature.numerator}
           accentPattern={accentPattern}
           onToggleBeatState={handleToggleBeatState}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Modal,
   View,
@@ -34,16 +34,30 @@ export const ShareSongModal: React.FC<ShareSongModalProps> = ({
   const [shares, setShares] = useState<SongShareRow[]>([]);
   const [statusMessage, setStatusMessage] = useState<{ text: string; isError: boolean } | null>(null);
 
-  const loadShares = async () => {
+  const isMountedRef = useRef(true);
+  const sharesRequestIdRef = useRef(0);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      sharesRequestIdRef.current++;
+    };
+  }, []);
+
+  const loadShares = useCallback(async () => {
     if (!song) return;
+    const requestId = ++sharesRequestIdRef.current;
     try {
       const targetId = song.cloudId || song.id;
       const list = await CloudLibraryService.getSharesForSong(targetId);
-      setShares(list);
+      if (isMountedRef.current && requestId === sharesRequestIdRef.current) {
+        setShares(list);
+      }
     } catch {
       // Ignore if not synced yet
     }
-  };
+  }, [song]);
 
   useEffect(() => {
     if (visible && song) {
@@ -51,8 +65,10 @@ export const ShareSongModal: React.FC<ShareSongModalProps> = ({
       setCanEdit(false);
       setStatusMessage(null);
       loadShares();
+    } else {
+      sharesRequestIdRef.current++;
     }
-  }, [visible, song]);
+  }, [visible, song, loadShares]);
 
   const handleShare = async () => {
     if (!song) return;
@@ -75,13 +91,18 @@ export const ShareSongModal: React.FC<ShareSongModalProps> = ({
       const uploaded = await CloudLibraryService.uploadSongToCloud(song, Boolean(song.isPublic));
       await CloudLibraryService.shareSongWithEmail(uploaded.id, cleanEmail, canEdit);
 
+      if (!isMountedRef.current || !visible) return;
       setStatusMessage({ text: `Música compartilhada com ${cleanEmail}!`, isError: false });
       setEmail('');
       await loadShares();
     } catch (err: any) {
-      setStatusMessage({ text: err.message || 'Erro ao compartilhar música.', isError: true });
+      if (isMountedRef.current && visible) {
+        setStatusMessage({ text: err.message || 'Erro ao compartilhar música.', isError: true });
+      }
     } finally {
-      setIsLoading(false);
+      if (isMountedRef.current) {
+        setIsLoading(false);
+      }
     }
   };
 
@@ -89,9 +110,13 @@ export const ShareSongModal: React.FC<ShareSongModalProps> = ({
     const doRevoke = async () => {
       try {
         await CloudLibraryService.revokeShare(shareId);
-        loadShares();
+        if (isMountedRef.current && visible) {
+          loadShares();
+        }
       } catch (err: any) {
-        alert(`Erro ao remover compartilhamento: ${err.message}`);
+        if (isMountedRef.current) {
+          alert(`Erro ao remover compartilhamento: ${err.message}`);
+        }
       }
     };
 

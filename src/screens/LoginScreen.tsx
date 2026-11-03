@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   SafeAreaView,
   View,
@@ -28,6 +28,14 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   const handleLogin = async () => {
     setErrorMessage(null);
@@ -43,15 +51,20 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
     setIsLoading(true);
     try {
       const result = await AuthGuardService.login(email, password);
+      if (!isMountedRef.current) return;
       if (result.success && result.session) {
         onLoginSuccess(result.session);
       } else {
         setErrorMessage(result.message || 'Credenciais inválidas.');
       }
     } catch (e: any) {
-      setErrorMessage(e.message || 'Erro ao realizar login.');
+      if (isMountedRef.current) {
+        setErrorMessage(e.message || 'Erro ao realizar login.');
+      }
     } finally {
-      setIsLoading(false);
+      if (isMountedRef.current) {
+        setIsLoading(false);
+      }
     }
   };
 

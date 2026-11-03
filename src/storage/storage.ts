@@ -286,4 +286,16 @@ export const StorageService = {
     await AsyncStorage.setItem(SONGS_KEY, JSON.stringify(INITIAL_SONGS));
     await AsyncStorage.setItem(PLAYLISTS_KEY, JSON.stringify(INITIAL_PLAYLISTS));
   },
+
+  async clearSessionCache(): Promise<void> {
+    try {
+      await Promise.all([
+        AsyncStorage.removeItem(SONGS_KEY),
+        AsyncStorage.removeItem(PLAYLISTS_KEY),
+        AsyncStorage.removeItem(SETTINGS_KEY),
+      ]);
+    } catch (err) {
+      console.warn('Erro ao limpar cache local de sessão:', err);
+    }
+  },
 };

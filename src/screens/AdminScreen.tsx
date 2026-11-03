@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -31,21 +31,34 @@ export const AdminScreen: React.FC<AdminScreenProps> = ({ currentSession, onExit
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<{ text: string; isError: boolean } | null>(null);
 
-  const loadData = async () => {
+  const isMountedRef = useRef(true);
+  const loadRequestIdRef = useRef(0);
+
+  const loadData = useCallback(async () => {
+    const requestId = ++loadRequestIdRef.current;
     setIsLoading(true);
     try {
       const data = await AuthGuardService.getInvites();
-      setInvites(data);
+      if (isMountedRef.current && requestId === loadRequestIdRef.current) {
+        setInvites(data);
+      }
     } catch {
       // Ignore
     } finally {
-      setIsLoading(false);
+      if (isMountedRef.current && requestId === loadRequestIdRef.current) {
+        setIsLoading(false);
+      }
     }
-  };
+  }, []);
 
   useEffect(() => {
+    isMountedRef.current = true;
     loadData();
-  }, []);
+    return () => {
+      isMountedRef.current = false;
+      loadRequestIdRef.current++;
+    };
+  }, [loadData]);
 
   const handleCreateInvite = async () => {
     setFeedback(null);
@@ -58,23 +71,32 @@ export const AdminScreen: React.FC<AdminScreenProps> = ({ currentSession, onExit
     setIsSubmitting(true);
     try {
       const created = await AuthGuardService.createInvite(cleanEmail, newRole, newNotes);
-      setInvites([created, ...invites]);
+      if (!isMountedRef.current) return;
+      setInvites((prev) => [created, ...prev]);
       setNewEmail('');
       setNewNotes('');
       setFeedback({ text: `Convite gerado com sucesso para ${cleanEmail}!`, isError: false });
     } catch (e: any) {
-      setFeedback({ text: e.message || 'Erro ao cadastrar convite.', isError: true });
+      if (isMountedRef.current) {
+        setFeedback({ text: e.message || 'Erro ao cadastrar convite.', isError: true });
+      }
     } finally {
-      setIsSubmitting(false);
+      if (isMountedRef.current) {
+        setIsSubmitting(false);
+      }
     }
   };
 
   const handleToggleStatus = async (invite: UserInvite) => {
     try {
       const updated = await AuthGuardService.toggleInviteStatus(invite.id);
-      setInvites(updated);
+      if (isMountedRef.current) {
+        setInvites(updated);
+      }
     } catch (e: any) {
-      alert(`Erro: ${e.message}`);
+      if (isMountedRef.current) {
+        alert(`Erro: ${e.message}`);
+      }
     }
   };
 
@@ -82,9 +104,13 @@ export const AdminScreen: React.FC<AdminScreenProps> = ({ currentSession, onExit
     const doDelete = async () => {
       try {
         const updated = await AuthGuardService.deleteInvite(invite.id);
-        setInvites(updated);
+        if (isMountedRef.current) {
+          setInvites(updated);
+        }
       } catch (e: any) {
-        alert(`Erro: ${e.message}`);
+        if (isMountedRef.current) {
+          alert(`Erro: ${e.message}`);
+        }
       }
     };
 
