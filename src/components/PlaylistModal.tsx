@@ -10,6 +10,7 @@ import {
   Platform,
 } from 'react-native';
 import { Playlist } from '../types';
+import { generateUUID } from '../supabase/cloudLibrary';
 import { useTheme } from '../theme/ThemeContext';
 
 interface PlaylistModalProps {
@@ -47,12 +48,14 @@ export const PlaylistModal: React.FC<PlaylistModalProps> = ({
       return;
     }
 
+    const resolvedId = playlistToEdit ? playlistToEdit.id : generateUUID();
+
     const saved: Playlist = {
-      id: playlistToEdit ? playlistToEdit.id : `playlist-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      id: resolvedId,
       name: name.trim(),
       description: description.trim() || undefined,
       songIds: playlistToEdit ? playlistToEdit.songIds : [],
-      cloudId: playlistToEdit?.cloudId,
+      cloudId: playlistToEdit ? playlistToEdit.cloudId : resolvedId,
       userId: playlistToEdit?.userId,
       isPublic: playlistToEdit?.isPublic,
       createdAt: playlistToEdit ? playlistToEdit.createdAt : Date.now(),

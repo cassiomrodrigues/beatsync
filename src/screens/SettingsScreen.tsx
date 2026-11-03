@@ -109,18 +109,32 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
       let songCount = 0;
       for (const song of localSongs) {
         if (!isMountedRef.current) return;
-        const uploaded = await CloudLibraryService.uploadSongToCloud(song, Boolean(song.isPublic));
+        const uploaded = await CloudLibraryService.uploadSongToCloud(
+          song,
+          Boolean(song.isPublic),
+          currentUser.id
+        );
         // Persist the cloud UUID locally so future syncs update instead of duplicating rows
-        await StorageService.saveSong({ ...song, cloudId: uploaded.id, userId: uploaded.userId });
+        await StorageService.saveSong({
+          ...song,
+          id: song.id.startsWith('seed-') ? song.id : uploaded.id,
+          cloudId: uploaded.id,
+          userId: uploaded.userId,
+          isPublic: uploaded.isPublic,
+        });
         songCount++;
       }
 
       let playlistCount = 0;
       for (const playlist of localPlaylists) {
         if (!isMountedRef.current) return;
-        const uploadedPlaylist = await CloudLibraryService.uploadPlaylistToCloud(playlist);
+        const uploadedPlaylist = await CloudLibraryService.uploadPlaylistToCloud(
+          playlist,
+          currentUser.id
+        );
         await StorageService.savePlaylist({
           ...playlist,
+          id: playlist.id.startsWith('playlist-') ? playlist.id : uploadedPlaylist.id,
           cloudId: uploadedPlaylist.id,
           userId: uploadedPlaylist.userId,
         });

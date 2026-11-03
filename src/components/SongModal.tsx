@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { MetronomeRhythmSnapshot, Song, SoundType, Subdivision } from '../types';
 import { audioEngine } from '../audio/audioEngine';
+import { generateUUID } from '../supabase/cloudLibrary';
 import { useTheme } from '../theme/ThemeContext';
 
 interface SongModalProps {
@@ -138,8 +139,10 @@ export const SongModal: React.FC<SongModalProps> = ({
     const finalBpm = clampBpmValue(bpmInput, getFallbackBpm());
     setBpmInput(String(finalBpm));
 
+    const resolvedId = songToEdit ? songToEdit.id : generateUUID();
+
     const savedSong: Song = {
-      id: songToEdit ? songToEdit.id : `song-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      id: resolvedId,
       title: title.trim(),
       artist: artist.trim(),
       bpm: finalBpm,
@@ -151,8 +154,8 @@ export const SongModal: React.FC<SongModalProps> = ({
       soundType,
       isPublic,
       createdAt: songToEdit ? songToEdit.createdAt : Date.now(),
-      // Preserve cloud linkage so edits update the same Supabase row instead of duplicating it
-      cloudId: songToEdit?.cloudId,
+      // Preserve cloud linkage (or assign UUID on creation) so upserts update the same Supabase row
+      cloudId: songToEdit ? songToEdit.cloudId : resolvedId,
       userId: songToEdit?.userId,
     };
 

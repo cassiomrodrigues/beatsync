@@ -1,4 +1,4 @@
-﻿export type SoundType = 'beep' | 'woodblock' | 'rimshot' | 'mechanical';
+export type SoundType = 'beep' | 'woodblock' | 'rimshot' | 'mechanical';
 
 export type BeatState = 'accent' | 'normal' | 'ghost' | 'mute';
 
@@ -61,6 +61,19 @@ export interface UserSettings {
   flashEnabled: boolean;
   hapticsEnabled: boolean;
   updatedAt?: string;
+}
+
+export type AuditAction = 'INSERT' | 'UPDATE' | 'DELETE';
+
+export interface AuditLog {
+  id: string;
+  tableName: 'songs' | 'playlists' | 'user_settings' | string;
+  recordId: string | null;
+  action: AuditAction;
+  userId: string | null;
+  oldData: Record<string, unknown> | null;
+  newData: Record<string, unknown> | null;
+  createdAt: string;
 }
 
 export interface MetronomeState {

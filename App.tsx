@@ -86,53 +86,64 @@ function AppContent() {
     };
   }, [setIsPlaying]);
 
-  // Load local + cloud data in parallel on startup / login (avoids waterfalls)
+  // Load local + cloud data with safe bidirectional reconciliation (no data loss)
   const loadData = useCallback(async () => {
     const requestId = ++loadDataRequestIdRef.current;
     try {
-      const [localSongs, localPlaylists, cloudSongs, cloudPlaylists] = await Promise.all([
+      const [localSongs, localPlaylists] = await Promise.all([
         StorageService.getSongs(),
         StorageService.getPlaylists(),
-        CloudLibraryService.fetchMySongs().catch(() => [] as Song[]),
-        CloudLibraryService.fetchMyPlaylists().catch(() => [] as Playlist[]),
       ]);
 
       if (!isMountedRef.current || requestId !== loadDataRequestIdRef.current) return;
 
-      // Merge cloud songs with local songs (deduplicating by cloudId or id)
-      let mergedSongs = localSongs;
-      if (cloudSongs.length > 0) {
-        const cloudIds = new Set(cloudSongs.map((cs) => cs.id));
-        const unsyncedLocal = localSongs.filter(
-          (ls) =>
-            !cloudIds.has(ls.id) &&
-            (!ls.cloudId || !cloudIds.has(ls.cloudId)) &&
-            !ls.id.startsWith('seed-')
+      setSongs(localSongs);
+      setPlaylists(localPlaylists);
+
+      const { songs: syncedSongs, playlists: syncedPlaylists } =
+        await CloudLibraryService.syncLocalAndCloudLibrary(
+          localSongs,
+          localPlaylists,
+          authSession?.userId
         );
-        mergedSongs = [...cloudSongs, ...unsyncedLocal];
-        await StorageService.setSongs(mergedSongs);
-      }
 
       if (!isMountedRef.current || requestId !== loadDataRequestIdRef.current) return;
 
-      // Merge cloud playlists with local playlists
-      let mergedPlaylists = localPlaylists;
-      if (cloudPlaylists.length > 0) {
-        const cloudPlaylistIds = new Set(cloudPlaylists.map((cp) => cp.id));
-        const unsyncedLocalPlaylists = localPlaylists.filter(
-          (lp) =>
-            !cloudPlaylistIds.has(lp.id) &&
-            (!lp.cloudId || !cloudPlaylistIds.has(lp.cloudId)) &&
-            !lp.id.startsWith('playlist-')
-        );
-        mergedPlaylists = [...cloudPlaylists, ...unsyncedLocalPlaylists];
-        await StorageService.setPlaylists(mergedPlaylists);
-      }
+      // Preserve any songs or playlists saved locally while the cloud sync request was in flight
+      const [latestLocalSongs, latestLocalPlaylists] = await Promise.all([
+        StorageService.getSongs(),
+        StorageService.getPlaylists(),
+      ]);
+
+      const syncedSongIds = new Set(syncedSongs.map((s) => s.id));
+      const syncedSongCloudIds = new Set(
+        syncedSongs.map((s) => s.cloudId).filter((id): id is string => Boolean(id))
+      );
+      const addedSongsDuringSync = latestLocalSongs.filter(
+        (ls) => !syncedSongIds.has(ls.id) && (!ls.cloudId || !syncedSongCloudIds.has(ls.cloudId))
+      );
+      const finalSongs = [...addedSongsDuringSync, ...syncedSongs];
+
+      const syncedPlaylistIds = new Set(syncedPlaylists.map((p) => p.id));
+      const syncedPlaylistCloudIds = new Set(
+        syncedPlaylists.map((p) => p.cloudId).filter((id): id is string => Boolean(id))
+      );
+      const addedPlaylistsDuringSync = latestLocalPlaylists.filter(
+        (lp) =>
+          !syncedPlaylistIds.has(lp.id) &&
+          (!lp.cloudId || !syncedPlaylistCloudIds.has(lp.cloudId))
+      );
+      const finalPlaylists = [...addedPlaylistsDuringSync, ...syncedPlaylists];
+
+      await Promise.all([
+        StorageService.setSongs(finalSongs),
+        StorageService.setPlaylists(finalPlaylists),
+      ]);
 
       if (!isMountedRef.current || requestId !== loadDataRequestIdRef.current) return;
 
-      setSongs(mergedSongs);
-      setPlaylists(mergedPlaylists);
+      setSongs(finalSongs);
+      setPlaylists(finalPlaylists);
     } catch (err) {
       console.error('Falha ao carregar dados:', err);
     } finally {
@@ -140,7 +151,7 @@ function AppContent() {
         setIsLoading(false);
       }
     }
-  }, []);
+  }, [authSession?.userId]);
 
   useEffect(() => {
     if (authSession?.userId) {
@@ -192,44 +203,55 @@ function AppContent() {
   };
 
   // CRUD SONG HANDLERS
-  const handleSaveSong = useCallback(async (song: Song) => {
-    const updated = await StorageService.saveSong(song);
-    if (!isMountedRef.current) return;
-    setSongs(updated);
-    setCurrentSong((prev) => (prev && prev.id === song.id ? song : prev));
-  }, []);
+  const handleSaveSong = useCallback(
+    async (song: Song): Promise<Song> => {
+      const updatedLocal = await StorageService.saveSong(song);
+      if (isMountedRef.current) {
+        setSongs(updatedLocal);
+        setCurrentSong((prev) => (prev && prev.id === song.id ? song : prev));
+      }
+
+      const uploaded = await CloudLibraryService.uploadSongToCloud(
+        song,
+        Boolean(song.isPublic),
+        authSession?.userId
+      );
+
+      const syncedSong: Song = {
+        ...song,
+        id: song.id.startsWith('seed-') ? song.id : uploaded.id,
+        cloudId: uploaded.id,
+        userId: uploaded.userId,
+        isPublic: uploaded.isPublic,
+      };
+
+      const syncedList = await StorageService.saveSong(syncedSong);
+      const updatedPlaylists = await StorageService.getPlaylists();
+      if (isMountedRef.current) {
+        setSongs(syncedList);
+        setPlaylists(updatedPlaylists);
+        setCurrentSong((prev) =>
+          prev && (prev.id === song.id || prev.id === syncedSong.id) ? syncedSong : prev
+        );
+      }
+
+      return syncedSong;
+    },
+    [authSession?.userId]
+  );
 
   const handleCreateSongFromMetronome = useCallback(
     async (song: Song) => {
-      const updated = await StorageService.saveSong(song);
-      if (!isMountedRef.current) return;
-      setSongs(updated);
-      setCurrentSong(song);
-
-      if (!authSession?.userId) return;
-
       try {
-        const uploaded = await CloudLibraryService.uploadSongToCloud(
-          song,
-          Boolean(song.isPublic)
-        );
-        if (!isMountedRef.current) return;
-        if (uploaded.cloudId !== song.cloudId || uploaded.userId !== song.userId) {
-          const syncedSong: Song = {
-            ...song,
-            cloudId: uploaded.cloudId,
-            userId: uploaded.userId,
-          };
-          const syncedList = await StorageService.saveSong(syncedSong);
-          if (!isMountedRef.current) return;
-          setSongs(syncedList);
-          setCurrentSong((prev) => (prev?.id === song.id ? syncedSong : prev));
+        const synced = await handleSaveSong(song);
+        if (isMountedRef.current) {
+          setCurrentSong(synced);
         }
       } catch (e) {
         console.warn('Erro ao sincronizar música criada no metrônomo:', e);
       }
     },
-    [authSession?.userId]
+    [handleSaveSong]
   );
 
   const handleDeleteSong = async (songId: string) => {

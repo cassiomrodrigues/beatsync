@@ -17,14 +17,14 @@ import { audioEngine } from '../audio/audioEngine';
 import { SongModal } from '../components/SongModal';
 import { AddToPlaylistModal } from '../components/AddToPlaylistModal';
 import { ShareSongModal } from '../components/ShareSongModal';
-import { CloudLibraryService } from '../supabase/cloudLibrary';
+import { CloudLibraryService, generateUUID } from '../supabase/cloudLibrary';
 import { AuthService } from '../supabase/supabaseClient';
 import { useTheme } from '../theme/ThemeContext';
 
 interface SongsScreenProps {
   songs: Song[];
   playlists: Playlist[];
-  onSaveSong: (song: Song) => void;
+  onSaveSong: (song: Song) => Promise<Song | void> | void;
   onDeleteSong: (songId: string) => void;
   onSelectSongForMetronome: (song: Song) => void;
   onAddSongToPlaylist: (playlistId: string, songId: string) => void;
@@ -217,51 +217,38 @@ export const SongsScreen: React.FC<SongsScreenProps> = ({
   };
 
   const handleImportSong = async (song: Song) => {
+    const newId = generateUUID();
     const importedSong: Song = {
       ...song,
-      id: `song-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      id: newId,
+      cloudId: newId,
       createdAt: Date.now(),
       isPublic: false,
       isShared: false,
-      // Imported copy is a new, unsynced song owned by the current user
-      cloudId: undefined,
+      // Imported copy is a new song owned by the current user
       userId: undefined,
       sharedBy: undefined,
     };
-    onSaveSong(importedSong);
     try {
-      const uploaded = await CloudLibraryService.uploadSongToCloud(importedSong, false);
-      if (!isMountedRef.current) return;
-      onSaveSong({ ...importedSong, cloudId: uploaded.cloudId, userId: uploaded.userId });
+      await onSaveSong(importedSong);
+      if (isMountedRef.current) {
+        alert(`"${song.title}" foi importada com sucesso para o seu repertório pessoal!`);
+      }
     } catch (e: unknown) {
       console.warn('Erro ao sincronizar música importada na nuvem:', e);
-    }
-    if (isMountedRef.current) {
-      alert(`"${song.title}" foi importada com sucesso para o seu repertório pessoal!`);
+      if (isMountedRef.current) {
+        alert(
+          `"${song.title}" foi salva no seu dispositivo, mas não foi possível sincronizar com a nuvem no momento.`
+        );
+      }
     }
   };
 
   const handleSaveSongWithCloud = async (song: Song) => {
-    onSaveSong(song);
-
-    if (!isLoggedIn) {
-      // Publishing requires a Supabase session; without it the song would silently stay local
-      if (song.isPublic) {
-        alert(
-          'Música salva apenas neste dispositivo. Para publicá-la na Biblioteca Global, conecte sua conta na nuvem em Configurações e toque em "Sincronizar".'
-        );
-      }
-      return;
-    }
-
     try {
-      const uploaded = await CloudLibraryService.uploadSongToCloud(song, Boolean(song.isPublic));
+      await onSaveSong(song);
       if (!isMountedRef.current) return;
-      // Persist the cloud UUID locally so future edits update the same row
-      if (uploaded.cloudId !== song.cloudId) {
-        onSaveSong({ ...song, cloudId: uploaded.cloudId, userId: uploaded.userId });
-      }
-      // Visibility may have changed: refresh the global listing
+      // Refresh Global Library listing so newly published or unpublished songs appear immediately
       loadGlobalSongs();
     } catch (e: unknown) {
       console.warn('Erro ao sincronizar música na nuvem:', e);

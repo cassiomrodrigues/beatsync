@@ -1,5 +1,14 @@
 import { supabase, AuthService } from './supabaseClient';
-import { Song, Playlist, UserSettings, BeatState, SoundType, Subdivision } from '../types';
+import {
+  Song,
+  Playlist,
+  UserSettings,
+  AuditLog,
+  AuditAction,
+  BeatState,
+  SoundType,
+  Subdivision,
+} from '../types';
 
 export interface CloudSongRow {
   id: string;
@@ -40,6 +49,17 @@ export interface CloudUserSettingsRow {
   updated_at: string;
 }
 
+export interface CloudAuditLogRow {
+  id: string;
+  table_name: string;
+  record_id: string | null;
+  action: AuditAction;
+  user_id: string | null;
+  old_data: Record<string, unknown> | null;
+  new_data: Record<string, unknown> | null;
+  created_at: string;
+}
+
 export interface SongShareRow {
   id: string;
   song_id: string;
@@ -60,9 +80,47 @@ const PLAYLIST_COLUMNS =
 const USER_SETTINGS_COLUMNS =
   'user_id, theme_id, default_sound_type, flash_enabled, haptics_enabled, created_at, updated_at';
 
+const AUDIT_LOG_COLUMNS =
+  'id, table_name, record_id, action, user_id, old_data, new_data, created_at';
+
 const GLOBAL_LIBRARY_LIMIT = 100;
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Generates an RFC 4122 v4 UUID so locally created songs and playlists
+ * already carry a valid primary key for atomic `.upsert()` in Supabase.
+ */
+export function generateUUID(): string {
+  if (typeof globalThis.crypto !== 'undefined' && typeof globalThis.crypto.randomUUID === 'function') {
+    return globalThis.crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (char) => {
+    const randomNibble = (Math.random() * 16) | 0;
+    const value = char === 'x' ? randomNibble : (randomNibble & 0x3) | 0x8;
+    return value.toString(16);
+  });
+}
+
+/**
+ * Resolves the authenticated Supabase user ID without unnecessary network roundtrips
+ * when an active session is already available locally.
+ */
+async function resolveAuthenticatedUserId(explicitUserId?: string): Promise<string | null> {
+  if (explicitUserId && UUID_PATTERN.test(explicitUserId)) {
+    return explicitUserId;
+  }
+  try {
+    const { data: sessionData } = await supabase.auth.getSession();
+    if (sessionData?.session?.user?.id) {
+      return sessionData.session.user.id;
+    }
+  } catch {
+    // Fallback to getCurrentUser below
+  }
+  const user = await AuthService.getCurrentUser();
+  return user?.id || null;
+}
 
 /** Resolves the Supabase row id for a song (persisted cloudId, or a UUID-shaped local id). */
 function resolveSongCloudId(song: Song, currentUserId: string): string | undefined {
@@ -83,6 +141,10 @@ function resolvePlaylistCloudId(playlist: Playlist, currentUserId: string): stri
   return UUID_PATTERN.test(playlist.id) ? playlist.id : undefined;
 }
 
+function getSongSignature(title: string, artist: string): string {
+  return `${title.trim().toLowerCase()}::${artist.trim().toLowerCase()}`;
+}
+
 function mapRowToSong(row: CloudSongRow, isShared = false, sharedBy?: string): Song {
   return {
     id: row.id,
@@ -96,7 +158,7 @@ function mapRowToSong(row: CloudSongRow, isShared = false, sharedBy?: string): S
     duration: row.duration || undefined,
     soundType: (row.sound_type as SoundType) || 'woodblock',
     accentPattern: Array.isArray(row.accent_pattern) ? (row.accent_pattern as BeatState[]) : undefined,
-    isPublic: row.is_public,
+    isPublic: Boolean(row.is_public),
     cloudId: row.id,
     userId: row.user_id,
     isShared,
@@ -117,7 +179,7 @@ function mapRowToPlaylist(row: CloudPlaylistRow): Playlist {
     songIds: parsedSongIds,
     cloudId: row.id,
     userId: row.user_id,
-    isPublic: row.is_public,
+    isPublic: Boolean(row.is_public),
     createdAt: new Date(row.created_at).getTime(),
   };
 }
@@ -133,71 +195,88 @@ function mapRowToUserSettings(row: CloudUserSettingsRow): UserSettings {
   };
 }
 
+function mapRowToAuditLog(row: CloudAuditLogRow): AuditLog {
+  return {
+    id: row.id,
+    tableName: row.table_name,
+    recordId: row.record_id,
+    action: row.action,
+    userId: row.user_id,
+    oldData: row.old_data,
+    newData: row.new_data,
+    createdAt: row.created_at,
+  };
+}
+
 export const CloudLibraryService = {
   /**
-   * Salva ou atualiza uma música na nuvem (Supabase) vinculada exclusivamente ao auth.uid()
+   * Salva ou atualiza uma música na nuvem (Supabase) via UPSERT atômico vinculada ao auth.uid()
    */
-  async uploadSongToCloud(song: Song, isPublic = false): Promise<Song> {
-    const user = await AuthService.getCurrentUser();
-    if (!user) {
+  async uploadSongToCloud(song: Song, isPublic?: boolean, userId?: string): Promise<Song> {
+    const resolvedUserId = await resolveAuthenticatedUserId(userId);
+    if (!resolvedUserId) {
       throw new Error('Você precisa estar autenticado para salvar músicas na nuvem.');
     }
 
+    const effectiveIsPublic = typeof isPublic === 'boolean' ? isPublic : Boolean(song.isPublic);
+    const targetId = resolveSongCloudId(song, resolvedUserId) || generateUUID();
+
     const payload = {
-      user_id: user.id,
-      title: song.title,
-      artist: song.artist,
+      id: targetId,
+      user_id: resolvedUserId,
+      title: song.title.trim(),
+      artist: (song.artist || '').trim(),
       bpm: song.bpm,
-      time_signature: song.timeSignature,
+      time_signature: song.timeSignature || '4/4',
       subdivision: song.subdivision || 1,
       key: song.key || null,
       notes: song.notes || null,
       duration: song.duration || null,
       sound_type: song.soundType || 'woodblock',
       accent_pattern: song.accentPattern || ['accent', 'normal', 'normal', 'normal'],
-      is_public: isPublic,
+      is_public: effectiveIsPublic,
       updated_at: new Date().toISOString(),
     };
 
-    const cloudId = resolveSongCloudId(song, user.id);
-
-    if (cloudId) {
-      // Try updating existing row owned by current user
-      const { data: updatedData, error: updateError } = await supabase
-        .from('songs')
-        .upsert({ id: cloudId, ...payload }, { onConflict: 'id' })
-        .select(SONG_COLUMNS)
-        .single<CloudSongRow>();
-
-      if (!updateError && updatedData) {
-        return mapRowToSong(updatedData);
-      }
-      // If upsert failed because the UUID belonged to another user in RLS, insert a fresh row for this user
-    }
-
-    const { data, error } = await supabase
+    const { data: upsertedData, error: upsertError } = await supabase
       .from('songs')
-      .insert(payload)
+      .upsert(payload, { onConflict: 'id' })
       .select(SONG_COLUMNS)
       .single<CloudSongRow>();
 
-    if (error) throw error;
-    return mapRowToSong(data);
+    if (!upsertError && upsertedData) {
+      return mapRowToSong(upsertedData);
+    }
+
+    // If the candidate UUID collided with another user's row under RLS, generate a fresh UUID and upsert
+    const fallbackPayload = {
+      ...payload,
+      id: generateUUID(),
+    };
+
+    const { data: fallbackData, error: fallbackError } = await supabase
+      .from('songs')
+      .upsert(fallbackPayload, { onConflict: 'id' })
+      .select(SONG_COLUMNS)
+      .single<CloudSongRow>();
+
+    if (fallbackError) throw fallbackError;
+    return mapRowToSong(fallbackData);
   },
 
   /**
    * Remove uma música na nuvem (apenas se pertencer ao auth.uid() atual)
    */
-  async deleteSongFromCloud(song: Song | string): Promise<void> {
-    const user = await AuthService.getCurrentUser();
-    if (!user) return;
+  async deleteSongFromCloud(song: Song | string, userId?: string): Promise<void> {
+    const resolvedUserId = await resolveAuthenticatedUserId(userId);
+    if (!resolvedUserId) return;
 
     const candidateId =
       typeof song === 'string'
         ? UUID_PATTERN.test(song)
           ? song
           : undefined
-        : resolveSongCloudId(song, user.id);
+        : resolveSongCloudId(song, resolvedUserId);
 
     if (!candidateId) return;
 
@@ -205,7 +284,7 @@ export const CloudLibraryService = {
       .from('songs')
       .delete()
       .eq('id', candidateId)
-      .eq('user_id', user.id);
+      .eq('user_id', resolvedUserId);
 
     if (error) throw error;
   },
@@ -213,14 +292,14 @@ export const CloudLibraryService = {
   /**
    * Busca as músicas do próprio usuário na nuvem
    */
-  async fetchMySongs(): Promise<Song[]> {
-    const user = await AuthService.getCurrentUser();
-    if (!user) return [];
+  async fetchMySongs(userId?: string): Promise<Song[]> {
+    const resolvedUserId = await resolveAuthenticatedUserId(userId);
+    if (!resolvedUserId) return [];
 
     const { data, error } = await supabase
       .from('songs')
       .select(SONG_COLUMNS)
-      .eq('user_id', user.id)
+      .eq('user_id', resolvedUserId)
       .order('created_at', { ascending: false })
       .returns<CloudSongRow[]>();
 
@@ -229,60 +308,64 @@ export const CloudLibraryService = {
   },
 
   /**
-   * Salva ou atualiza uma playlist na nuvem (Supabase) vinculada ao auth.uid()
+   * Salva ou atualiza uma playlist na nuvem (Supabase) via UPSERT atômico vinculada ao auth.uid()
    */
-  async uploadPlaylistToCloud(playlist: Playlist): Promise<Playlist> {
-    const user = await AuthService.getCurrentUser();
-    if (!user) {
+  async uploadPlaylistToCloud(playlist: Playlist, userId?: string): Promise<Playlist> {
+    const resolvedUserId = await resolveAuthenticatedUserId(userId);
+    if (!resolvedUserId) {
       throw new Error('Você precisa estar autenticado para salvar playlists na nuvem.');
     }
 
+    const targetId = resolvePlaylistCloudId(playlist, resolvedUserId) || generateUUID();
+
     const payload = {
-      user_id: user.id,
-      name: playlist.name,
+      id: targetId,
+      user_id: resolvedUserId,
+      name: playlist.name.trim(),
       description: playlist.description || '',
       song_ids: playlist.songIds || [],
       is_public: Boolean(playlist.isPublic),
       updated_at: new Date().toISOString(),
     };
 
-    const cloudId = resolvePlaylistCloudId(playlist, user.id);
-
-    if (cloudId) {
-      const { data: updatedData, error: updateError } = await supabase
-        .from('playlists')
-        .upsert({ id: cloudId, ...payload }, { onConflict: 'id' })
-        .select(PLAYLIST_COLUMNS)
-        .single<CloudPlaylistRow>();
-
-      if (!updateError && updatedData) {
-        return mapRowToPlaylist(updatedData);
-      }
-    }
-
-    const { data, error } = await supabase
+    const { data: upsertedData, error: upsertError } = await supabase
       .from('playlists')
-      .insert(payload)
+      .upsert(payload, { onConflict: 'id' })
       .select(PLAYLIST_COLUMNS)
       .single<CloudPlaylistRow>();
 
-    if (error) throw error;
-    return mapRowToPlaylist(data);
+    if (!upsertError && upsertedData) {
+      return mapRowToPlaylist(upsertedData);
+    }
+
+    const fallbackPayload = {
+      ...payload,
+      id: generateUUID(),
+    };
+
+    const { data: fallbackData, error: fallbackError } = await supabase
+      .from('playlists')
+      .upsert(fallbackPayload, { onConflict: 'id' })
+      .select(PLAYLIST_COLUMNS)
+      .single<CloudPlaylistRow>();
+
+    if (fallbackError) throw fallbackError;
+    return mapRowToPlaylist(fallbackData);
   },
 
   /**
    * Remove uma playlist na nuvem (apenas se pertencer ao auth.uid() atual)
    */
-  async deletePlaylistFromCloud(playlist: Playlist | string): Promise<void> {
-    const user = await AuthService.getCurrentUser();
-    if (!user) return;
+  async deletePlaylistFromCloud(playlist: Playlist | string, userId?: string): Promise<void> {
+    const resolvedUserId = await resolveAuthenticatedUserId(userId);
+    if (!resolvedUserId) return;
 
     const candidateId =
       typeof playlist === 'string'
         ? UUID_PATTERN.test(playlist)
           ? playlist
           : undefined
-        : resolvePlaylistCloudId(playlist, user.id);
+        : resolvePlaylistCloudId(playlist, resolvedUserId);
 
     if (!candidateId) return;
 
@@ -290,7 +373,7 @@ export const CloudLibraryService = {
       .from('playlists')
       .delete()
       .eq('id', candidateId)
-      .eq('user_id', user.id);
+      .eq('user_id', resolvedUserId);
 
     if (error) throw error;
   },
@@ -298,14 +381,14 @@ export const CloudLibraryService = {
   /**
    * Busca as playlists do próprio usuário na nuvem
    */
-  async fetchMyPlaylists(): Promise<Playlist[]> {
-    const user = await AuthService.getCurrentUser();
-    if (!user) return [];
+  async fetchMyPlaylists(userId?: string): Promise<Playlist[]> {
+    const resolvedUserId = await resolveAuthenticatedUserId(userId);
+    if (!resolvedUserId) return [];
 
     const { data, error } = await supabase
       .from('playlists')
       .select(PLAYLIST_COLUMNS)
-      .eq('user_id', user.id)
+      .eq('user_id', resolvedUserId)
       .order('created_at', { ascending: false })
       .returns<CloudPlaylistRow[]>();
 
@@ -314,11 +397,147 @@ export const CloudLibraryService = {
   },
 
   /**
+   * Sincronização bidirecional Local <-> Nuvem sem perda de dados:
+   * - Busca músicas e playlists do usuário no Supabase;
+   * - Faz upload automático (upsert) de músicas/playlists criadas localmente que ainda não estão na nuvem;
+   * - Preserva o repertório local (incluindo seeds não sincronizadas) evitando descarte acidental;
+   * - Atualiza referências de IDs nas playlists quando músicas locais recebem UUID na nuvem.
+   */
+  async syncLocalAndCloudLibrary(
+    localSongs: Song[],
+    localPlaylists: Playlist[],
+    userId?: string
+  ): Promise<{ songs: Song[]; playlists: Playlist[] }> {
+    const resolvedUserId = await resolveAuthenticatedUserId(userId);
+    if (!resolvedUserId) {
+      return { songs: localSongs, playlists: localPlaylists };
+    }
+
+    const [cloudSongs, cloudPlaylists] = await Promise.all([
+      this.fetchMySongs(resolvedUserId).catch((err) => {
+        console.warn('Falha ao buscar músicas da nuvem durante sync:', err);
+        return [] as Song[];
+      }),
+      this.fetchMyPlaylists(resolvedUserId).catch((err) => {
+        console.warn('Falha ao buscar playlists da nuvem durante sync:', err);
+        return [] as Playlist[];
+      }),
+    ]);
+
+    const cloudSongsById = new Map<string, Song>();
+    const cloudSongsBySig = new Map<string, Song>();
+    for (const cs of cloudSongs) {
+      cloudSongsById.set(cs.id, cs);
+      cloudSongsBySig.set(getSongSignature(cs.title, cs.artist), cs);
+    }
+
+    const songIdRemap = new Map<string, string>();
+    const retainedLocalSongs: Song[] = [];
+
+    for (const ls of localSongs) {
+      const matchedById =
+        cloudSongsById.get(ls.id) || (ls.cloudId ? cloudSongsById.get(ls.cloudId) : undefined);
+
+      if (matchedById) {
+        if (ls.id !== matchedById.id) {
+          songIdRemap.set(ls.id, matchedById.id);
+        }
+        continue;
+      }
+
+      const isSeedSong = ls.id.startsWith('seed-');
+      if (isSeedSong) {
+        const matchedSeedBySig = cloudSongsBySig.get(getSongSignature(ls.title, ls.artist));
+        if (matchedSeedBySig) {
+          songIdRemap.set(ls.id, matchedSeedBySig.id);
+          continue;
+        }
+        // Keep un-uploaded seed songs locally so saving a new song never wipes out the rest of the library
+        retainedLocalSongs.push(ls);
+        continue;
+      }
+
+      // User-authored song not yet present in cloudSongs: upsert it to Supabase now so it is never lost
+      try {
+        const uploaded = await this.uploadSongToCloud(ls, Boolean(ls.isPublic), resolvedUserId);
+        if (ls.id !== uploaded.id) {
+          songIdRemap.set(ls.id, uploaded.id);
+        }
+        cloudSongsById.set(uploaded.id, uploaded);
+      } catch (err) {
+        console.warn('Mantendo música local pendente de sincronização:', err);
+        retainedLocalSongs.push(ls);
+      }
+    }
+
+    const mergedSongs: Song[] = [
+      ...Array.from(cloudSongsById.values()),
+      ...retainedLocalSongs,
+    ].sort((a, b) => b.createdAt - a.createdAt);
+
+    // Reconcile playlists and apply songIdRemap
+    const cloudPlaylistsById = new Map<string, Playlist>();
+    const cloudPlaylistsByName = new Map<string, Playlist>();
+    for (const cp of cloudPlaylists) {
+      const remappedSongIds = cp.songIds.map((id) => songIdRemap.get(id) || id);
+      const normalized = { ...cp, songIds: remappedSongIds };
+      cloudPlaylistsById.set(cp.id, normalized);
+      cloudPlaylistsByName.set(cp.name.trim().toLowerCase(), normalized);
+    }
+
+    const retainedLocalPlaylists: Playlist[] = [];
+
+    for (const lp of localPlaylists) {
+      const remappedSongIds = lp.songIds.map((id) => songIdRemap.get(id) || id);
+      const updatedLocalPlaylist: Playlist = { ...lp, songIds: remappedSongIds };
+
+      const matchedById =
+        cloudPlaylistsById.get(lp.id) ||
+        (lp.cloudId ? cloudPlaylistsById.get(lp.cloudId) : undefined);
+
+      if (matchedById) {
+        continue;
+      }
+
+      const isDefaultPlaylist = lp.id.startsWith('playlist-') && !UUID_PATTERN.test(lp.id);
+      if (isDefaultPlaylist) {
+        const matchedByName = cloudPlaylistsByName.get(lp.name.trim().toLowerCase());
+        if (matchedByName) {
+          continue;
+        }
+        retainedLocalPlaylists.push(updatedLocalPlaylist);
+        continue;
+      }
+
+      try {
+        const uploadedPlaylist = await this.uploadPlaylistToCloud(
+          updatedLocalPlaylist,
+          resolvedUserId
+        );
+        cloudPlaylistsById.set(uploadedPlaylist.id, uploadedPlaylist);
+      } catch (err) {
+        console.warn('Mantendo playlist local pendente de sincronização:', err);
+        retainedLocalPlaylists.push(updatedLocalPlaylist);
+      }
+    }
+
+    const mergedPlaylists: Playlist[] = [
+      ...Array.from(cloudPlaylistsById.values()),
+      ...retainedLocalPlaylists,
+    ].sort((a, b) => b.createdAt - a.createdAt);
+
+    return {
+      songs: mergedSongs,
+      playlists: mergedPlaylists,
+    };
+  },
+
+  /**
    * Busca as preferências do usuário (`user_settings`) no Supabase.
    * Cria o registro padrão automaticamente se ainda não existir para este `auth.uid()`.
    */
   async fetchUserSettings(userId?: string): Promise<UserSettings | null> {
-    const resolvedUserId = userId || (await AuthService.getCurrentUser())?.id;
+    const resolvedUserId = await resolveAuthenticatedUserId(userId);
     if (!resolvedUserId) return null;
 
     const { data, error } = await supabase
@@ -360,7 +579,7 @@ export const CloudLibraryService = {
     partial: Partial<Omit<UserSettings, 'userId' | 'updatedAt'>>,
     userId?: string
   ): Promise<UserSettings | null> {
-    const resolvedUserId = userId || (await AuthService.getCurrentUser())?.id;
+    const resolvedUserId = await resolveAuthenticatedUserId(userId);
     if (!resolvedUserId) return null;
 
     const updatePayload: Record<string, unknown> = {
@@ -384,7 +603,7 @@ export const CloudLibraryService = {
   },
 
   /**
-   * Busca músicas da Biblioteca Global
+   * Busca músicas da Biblioteca Global (is_public = true) visíveis para qualquer usuário logado
    */
   async fetchGlobalSongs(): Promise<Song[]> {
     const { data, error } = await supabase
@@ -397,6 +616,21 @@ export const CloudLibraryService = {
 
     if (error) throw error;
     return (data || []).map((row) => mapRowToSong(row));
+  },
+
+  /**
+   * Consulta os registros da tabela de auditoria (`audit_logs`)
+   */
+  async fetchAuditLogs(limit = 50): Promise<AuditLog[]> {
+    const { data, error } = await supabase
+      .from('audit_logs')
+      .select(AUDIT_LOG_COLUMNS)
+      .order('created_at', { ascending: false })
+      .limit(limit)
+      .returns<CloudAuditLogRow[]>();
+
+    if (error) throw error;
+    return (data || []).map(mapRowToAuditLog);
   },
 
   /**

@@ -20,7 +20,8 @@ O **BeatSync** é um aplicativo mobile profissional focado em músicos, bandas e
 | **Linguagem** | TypeScript | ~6.0.3 | Tipagem estática estrita (`strict: true`) |
 | **UI Library** | React | 19.3.0 | Componentes funcionais com Hooks modernos |
 | **Engine de Áudio** | Web Audio API / Synthesis | Nativo / Web Audio | Síntese procedural de ondas (senoide, ruído branco, filtros passa-faixa) |
-| **Persistência Local** | `@react-native-async-storage/async-storage` | ^3.1.1 | Armazenamento chave-valor offline-first |
+| **Persistência Local** | `@react-native-async-storage/async-storage` | ^3.1.1 | Armazenamento chave-valor offline-first com fila serializada |
+| **Backend & Banco Nuvem** | `@supabase/supabase-js` + PostgreSQL | ^2.118.0 | Auth, RLS, Biblioteca Global (`songs`), `playlists`, `user_settings` e `audit_logs` via Triggers |
 | **Feedback Háptico** | `expo-haptics` | ^58.0.7 | Vibração rítmica tátil sincronizada com tempos |
 | **Web Runtime** | `react-native-web` + Metro Runtime | ^0.21.4 / ~58.0.15 | Execução de preview web e testes rápidos |
 
@@ -85,4 +86,4 @@ beatsync/
 ## 5. Dívidas Técnicas & Próximas Evoluções Mapeadas
 1. **Migração para Expo Router:** O projeto atualmente utiliza navegação manual por abas no `App.tsx`. A evolução recomendada é migrar para navegação declarativa baseada em pastas (`src/app/`).
 2. **Camada de Testes Automatizados:** Configuração do Jest + React Native Testing Library para cobrir cálculos matemáticos de BPM, parsing de compassos e testes de unidade do `storage.ts`.
-3. **Persistência Relacional / Nuvem (Futuro):** Possibilidade de sincronização em nuvem (ex: Supabase / Firebase) para compartilhamento de setlists entre membros de banda.
+3. **Persistência Relacional & Auditoria em Nuvem (Supabase):** Sincronização bidirecional Local-Nuvem com `upsert` atômico baseado em UUID v4, políticas RLS para visibilidade de músicas públicas (`is_public = true`) na Biblioteca Global e auditoria automatizada (`public.audit_logs` + triggers `trg_songs_audit_log`, `trg_playlists_audit_log`, `trg_user_settings_audit_log`).
