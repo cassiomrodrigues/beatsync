@@ -79,3 +79,8 @@ Nenhum agente inicia sua etapa sem validar o cumprimento do checklist do anteces
 1. **Branching Obrigatório:** Antes de qualquer alteração de código, instruir ou garantir o uso do padrão **Conventional Branch** (`feat/...`, `fix/...`, `refactor/...`).
 2. **Zero Scope Creep:** Proibir adição de funcionalidades não solicitadas ou refatorações oportunistas não relacionadas ao ticket.
 3. **Preservação de Contexto Vivo:** Ao concluir qualquer alteração estrutural ou decisão de design, atualizar imediatamente [.agents/PROJECT_CONTEXT.md](file:///d:/CASSIO/git/beatsync/.agents/PROJECT_CONTEXT.md).
+4. **Fluxo de Validação via Cloudflare Preview (Gate de Produção):**
+   - Ao concluir uma alteração, realizar commit e push **apenas** da branch de trabalho (`git push -u origin <branch>`) para o repositório remoto.
+   - **NÃO** executar merge para a `main` de imediato.
+   - Informar ao usuário que a branch foi enviada e fornecer o link de Preview do Cloudflare correspondente (`https://<branch-normalizada>.beatsync.pages.dev`, onde `/` é convertido em `-`, ou extraído do output da CLI/GitHub Actions).
+   - Aguardar confirmação explícita do usuário (ex: *"Validado, pode publicar"*) antes de realizar checkout para a `main`, merge da branch aprovada e push final para produção.

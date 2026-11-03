@@ -49,3 +49,12 @@ Para orquestração estruturada de demandas, arquitetura e especialistas de soft
 - As 7 personas especializadas residem em [.agents/personas/](file:///d:/CASSIO/git/beatsync/.agents/personas/).
 - Skills persistentes do workspace residem em [.agents/skills/](file:///d:/CASSIO/git/beatsync/.agents/skills/) (ex: [`web-pwa-offline-first`](file:///d:/CASSIO/git/beatsync/.agents/skills/web-pwa-offline-first/SKILL.md)).
 
+## Fluxo de Validação e Publicação (Cloudflare Previews com Link Automático)
+
+Para garantir homologação rápida e segura em todas as entregas:
+1. **Commit e Push na Branch de Trabalho:** Ao concluir uma alteração, faça o commit e o push automático **apenas** da branch de trabalho seguindo o padrão *Conventional Branch* (ex: `fix/correcao-audio` ou `feat/novo-tema`) para o repositório remoto (`git push -u origin <branch>`).
+2. **Proibição de Merge Imediato:** **NÃO** execute o merge para a branch `main` de imediato.
+3. **Fornecimento do Link de Preview:** Após o push, informe que a branch foi enviada e forneça o link de Preview do Cloudflare Pages correspondente à branch (padrão `https://<nome-da-branch-normalizado>.beatsync.pages.dev`, substituindo `/` por `-`, ou extraído diretamente do retorno da CLI/GitHub Actions).
+4. **Gate de Confirmação Explícita:** Aguarde. Apenas após a confirmação explícita do usuário (ex: *"Validado, pode publicar"*), realize o checkout para a `main`, faça o merge da branch aprovada e execute o push final para produção.
+
+
