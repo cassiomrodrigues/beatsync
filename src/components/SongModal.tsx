@@ -10,29 +10,44 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { Song, SoundType, Subdivision } from '../types';
+import { MetronomeRhythmSnapshot, Song, SoundType, Subdivision } from '../types';
+import { audioEngine } from '../audio/audioEngine';
 import { useTheme } from '../theme/ThemeContext';
 
 interface SongModalProps {
   visible: boolean;
   songToEdit: Song | null;
+  initialValues?: Partial<MetronomeRhythmSnapshot>;
   onClose: () => void;
   onSave: (song: Song) => void;
 }
 
+const MIN_BPM = 20;
+const MAX_BPM = 320;
+const DEFAULT_BPM = 120;
+
 const COMMON_SIGNATURES = ['4/4', '3/4', '2/4', '6/8', '5/4', '7/8', '12/8'];
 const COMMON_KEYS = ['C', 'G', 'D', 'A', 'E', 'B', 'F', 'Am', 'Em', 'Dm', 'Bm', 'F#m', 'C#m', 'G#m'];
+
+function clampBpmValue(rawValue: string | number, fallback: number = DEFAULT_BPM): number {
+  const parsed = typeof rawValue === 'number' ? rawValue : parseInt(rawValue.trim(), 10);
+  if (Number.isNaN(parsed)) {
+    return Math.max(MIN_BPM, Math.min(MAX_BPM, fallback));
+  }
+  return Math.max(MIN_BPM, Math.min(MAX_BPM, parsed));
+}
 
 export const SongModal: React.FC<SongModalProps> = ({
   visible,
   songToEdit,
+  initialValues,
   onClose,
   onSave,
 }) => {
   const { currentTheme, defaultSoundType } = useTheme();
   const [title, setTitle] = useState('');
   const [artist, setArtist] = useState('');
-  const [bpm, setBpm] = useState(120);
+  const [bpmInput, setBpmInput] = useState(String(DEFAULT_BPM));
   const [timeSignature, setTimeSignature] = useState('4/4');
   const [subdivision, setSubdivision] = useState<Subdivision>(1);
   const [key, setKey] = useState('');
@@ -43,10 +58,12 @@ export const SongModal: React.FC<SongModalProps> = ({
   const [errors, setErrors] = useState<{ title?: string; artist?: string }>({});
 
   useEffect(() => {
+    if (!visible) return;
+
     if (songToEdit) {
       setTitle(songToEdit.title);
       setArtist(songToEdit.artist);
-      setBpm(songToEdit.bpm);
+      setBpmInput(String(clampBpmValue(songToEdit.bpm, DEFAULT_BPM)));
       setTimeSignature(songToEdit.timeSignature);
       setSubdivision(songToEdit.subdivision || 1);
       setKey(songToEdit.key || '');
@@ -55,19 +72,54 @@ export const SongModal: React.FC<SongModalProps> = ({
       setSoundType(songToEdit.soundType || defaultSoundType || 'woodblock');
       setIsPublic(Boolean(songToEdit.isPublic));
     } else {
+      const liveSnapshot = audioEngine.getRhythmSnapshot();
+      const targetBpm = clampBpmValue(
+        initialValues?.bpm ?? liveSnapshot.bpm,
+        DEFAULT_BPM
+      );
+      const targetTimeSignature =
+        initialValues?.timeSignature || liveSnapshot.timeSignature || '4/4';
+      const targetSubdivision =
+        initialValues?.subdivision || liveSnapshot.subdivision || 1;
+      const targetSoundType =
+        initialValues?.soundType || liveSnapshot.soundType || defaultSoundType || 'woodblock';
+
       setTitle('');
       setArtist('');
-      setBpm(120);
-      setTimeSignature('4/4');
-      setSubdivision(1);
+      setBpmInput(String(targetBpm));
+      setTimeSignature(targetTimeSignature);
+      setSubdivision(targetSubdivision);
       setKey('');
       setNotes('');
       setDuration('');
-      setSoundType(defaultSoundType || 'woodblock');
+      setSoundType(targetSoundType);
       setIsPublic(false);
     }
     setErrors({});
-  }, [songToEdit, visible, defaultSoundType]);
+  }, [songToEdit, visible, defaultSoundType, initialValues]);
+
+  const getFallbackBpm = (): number => {
+    if (songToEdit) return songToEdit.bpm;
+    if (initialValues?.bpm !== undefined) return initialValues.bpm;
+    return audioEngine.getRhythmSnapshot().bpm || DEFAULT_BPM;
+  };
+
+  const handleBpmChange = (value: string) => {
+    const digitsOnly = value.replace(/[^0-9]/g, '');
+    setBpmInput(digitsOnly);
+  };
+
+  const handleBpmBlur = () => {
+    const clamped = clampBpmValue(bpmInput, getFallbackBpm());
+    setBpmInput(String(clamped));
+  };
+
+  const handleBpmStep = (delta: number) => {
+    const fallback = getFallbackBpm();
+    const current = clampBpmValue(bpmInput, fallback);
+    const next = clampBpmValue(current + delta, fallback);
+    setBpmInput(String(next));
+  };
 
   const handleSave = () => {
     const newErrors: { title?: string; artist?: string } = {};
@@ -83,11 +135,14 @@ export const SongModal: React.FC<SongModalProps> = ({
       return;
     }
 
+    const finalBpm = clampBpmValue(bpmInput, getFallbackBpm());
+    setBpmInput(String(finalBpm));
+
     const savedSong: Song = {
       id: songToEdit ? songToEdit.id : `song-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
       title: title.trim(),
       artist: artist.trim(),
-      bpm: Number(bpm) || 120,
+      bpm: finalBpm,
       timeSignature: timeSignature.trim() || '4/4',
       subdivision,
       key: key.trim() || undefined,
@@ -193,7 +248,9 @@ export const SongModal: React.FC<SongModalProps> = ({
                   ]}
                 >
                   <TouchableOpacity
-                    onPress={() => setBpm(Math.max(20, bpm - 1))}
+                    onPress={() => handleBpmStep(-1)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Diminuir 1 BPM"
                     style={styles.bpmBtn}
                   >
                     <Text style={[styles.bpmBtnText, { color: currentTheme.accent }]}>−</Text>
@@ -201,15 +258,18 @@ export const SongModal: React.FC<SongModalProps> = ({
                   <TextInput
                     style={[styles.bpmInput, { color: currentTheme.text }]}
                     keyboardType="numeric"
-                    value={String(bpm)}
-                    onChangeText={(v) => {
-                      const num = parseInt(v, 10);
-                      if (!isNaN(num)) setBpm(Math.max(20, Math.min(320, num)));
-                      else if (v === '') setBpm(0);
-                    }}
+                    inputMode="numeric"
+                    maxLength={3}
+                    placeholder="120"
+                    placeholderTextColor={currentTheme.textMuted}
+                    value={bpmInput}
+                    onChangeText={handleBpmChange}
+                    onBlur={handleBpmBlur}
                   />
                   <TouchableOpacity
-                    onPress={() => setBpm(Math.min(320, bpm + 1))}
+                    onPress={() => handleBpmStep(1)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Aumentar 1 BPM"
                     style={styles.bpmBtn}
                   >
                     <Text style={[styles.bpmBtnText, { color: currentTheme.accent }]}>+</Text>
@@ -547,7 +607,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 10,
-    fontSize: 15,
+    fontSize: 16,
   },
   textArea: {
     height: 70,

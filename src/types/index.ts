@@ -1,4 +1,4 @@
-export type SoundType = 'beep' | 'woodblock' | 'rimshot' | 'mechanical';
+﻿export type SoundType = 'beep' | 'woodblock' | 'rimshot' | 'mechanical';
 
 export type BeatState = 'accent' | 'normal' | 'ghost' | 'mute';
 
@@ -9,6 +9,13 @@ export interface TimeSignature {
 }
 
 export type Subdivision = 1 | 2 | 3 | 4; // 1 = quarter, 2 = 8th, 3 = triplet, 4 = 16th
+
+export interface MetronomeRhythmSnapshot {
+  bpm: number;
+  timeSignature: string;
+  subdivision: Subdivision;
+  soundType: SoundType;
+}
 
 export interface Song {
   id: string;

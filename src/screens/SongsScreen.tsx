@@ -12,7 +12,8 @@ import {
   RefreshControl,
   useWindowDimensions,
 } from 'react-native';
-import { Song, Playlist } from '../types';
+import { MetronomeRhythmSnapshot, Song, Playlist } from '../types';
+import { audioEngine } from '../audio/audioEngine';
 import { SongModal } from '../components/SongModal';
 import { AddToPlaylistModal } from '../components/AddToPlaylistModal';
 import { ShareSongModal } from '../components/ShareSongModal';
@@ -56,6 +57,9 @@ export const SongsScreen: React.FC<SongsScreenProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [sortOption, setSortOption] = useState<SortOption>('recent');
   const [selectedSongToEdit, setSelectedSongToEdit] = useState<Song | null>(null);
+  const [newSongPreset, setNewSongPreset] = useState<MetronomeRhythmSnapshot>(() =>
+    audioEngine.getRhythmSnapshot()
+  );
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [playlistModalSong, setPlaylistModalSong] = useState<Song | null>(null);
   const [shareModalSong, setShareModalSong] = useState<Song | null>(null);
@@ -664,6 +668,7 @@ export const SongsScreen: React.FC<SongsScreenProps> = ({
           activeOpacity={0.85}
           onPress={() => {
             setSelectedSongToEdit(null);
+            setNewSongPreset(audioEngine.getRhythmSnapshot());
             setIsModalVisible(true);
           }}
           style={[styles.fab, { backgroundColor: currentTheme.accent }]}
@@ -677,6 +682,7 @@ export const SongsScreen: React.FC<SongsScreenProps> = ({
       <SongModal
         visible={isModalVisible}
         songToEdit={selectedSongToEdit}
+        initialValues={newSongPreset}
         onClose={() => {
           setIsModalVisible(false);
           setSelectedSongToEdit(null);

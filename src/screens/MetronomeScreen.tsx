@@ -10,6 +10,7 @@ import {
 import { AppIcon } from '../components/AppIcon';
 import { audioEngine } from '../audio/audioEngine';
 import { BeatVisualizer } from '../components/BeatVisualizer';
+import { SongModal } from '../components/SongModal';
 import { TapTempo } from '../components/TapTempo';
 import { TimeSignatureModal } from '../components/TimeSignatureModal';
 import { BeatState, Song, SoundType, Subdivision, TimeSignature } from '../types';
@@ -19,6 +20,7 @@ interface MetronomeScreenProps {
   currentSong: Song | null;
   onClearCurrentSong: () => void;
   onOpenSongsTab: () => void;
+  onSaveNewSong: (song: Song) => void;
 }
 
 const TEMPO_MARKINGS = [
@@ -485,6 +487,7 @@ export const MetronomeScreen: React.FC<MetronomeScreenProps> = ({
   currentSong,
   onClearCurrentSong,
   onOpenSongsTab,
+  onSaveNewSong,
 }) => {
   const {
     currentTheme,
@@ -503,6 +506,7 @@ export const MetronomeScreen: React.FC<MetronomeScreenProps> = ({
   const [accentPattern, setAccentPattern] = useState<BeatState[]>(INITIAL_ACCENT_PATTERN);
   const [flashEnabled, setFlashEnabled] = useState(cloudFlashEnabled);
   const [tsModalVisible, setTsModalVisible] = useState(false);
+  const [isNewSongModalVisible, setIsNewSongModalVisible] = useState(false);
 
   // Sync default sound type and flash preference when user_settings load from Supabase
   useEffect(() => {
@@ -636,6 +640,14 @@ export const MetronomeScreen: React.FC<MetronomeScreenProps> = ({
 
   const handleCloseTsModal = useCallback(() => {
     setTsModalVisible(false);
+  }, []);
+
+  const handleOpenNewSongModal = useCallback(() => {
+    setIsNewSongModalVisible(true);
+  }, []);
+
+  const handleCloseNewSongModal = useCallback(() => {
+    setIsNewSongModalVisible(false);
   }, []);
 
   const handleSelectSubdivision = useCallback((sub: Subdivision) => {
@@ -852,7 +864,7 @@ export const MetronomeScreen: React.FC<MetronomeScreenProps> = ({
               : null,
           ]}
         >
-          <View style={styles.bpmHeroCenter}>
+          <View style={styles.bpmCardHeaderRow}>
             <Text
               style={[
                 styles.tempoMarkingText,
@@ -861,6 +873,28 @@ export const MetronomeScreen: React.FC<MetronomeScreenProps> = ({
             >
               {getTempoName(bpm).toUpperCase()}
             </Text>
+
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={handleOpenNewSongModal}
+              accessibilityRole="button"
+              accessibilityLabel="Nova Música: salvar andamento, compasso e subdivisão atuais na biblioteca"
+              style={[
+                styles.newSongMetronomeBtn,
+                {
+                  backgroundColor: currentTheme.isOled ? '#000000' : currentTheme.navActive,
+                  borderColor: currentTheme.accent,
+                },
+              ]}
+            >
+              <AppIcon name="add" size={13} color={currentTheme.accent} />
+              <Text style={[styles.newSongMetronomeBtnText, { color: currentTheme.accent }]}>
+                Nova Música
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.bpmHeroCenter}>
             <View style={styles.bpmDisplayRow}>
               <Text style={[styles.bpmNumber, { color: currentTheme.text }]}>
                 {bpm}
@@ -962,6 +996,20 @@ export const MetronomeScreen: React.FC<MetronomeScreenProps> = ({
         onClose={handleCloseTsModal}
         onSelect={handleSelectTimeSignature}
       />
+
+      {/* Quick Create Song Modal synced with live Metronome state */}
+      <SongModal
+        visible={isNewSongModalVisible}
+        songToEdit={null}
+        initialValues={{
+          bpm,
+          timeSignature: timeSignature.label,
+          subdivision,
+          soundType,
+        }}
+        onClose={handleCloseNewSongModal}
+        onSave={onSaveNewSong}
+      />
     </View>
   );
 };
@@ -1054,6 +1102,29 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 10,
     alignItems: 'center',
+  },
+  bpmCardHeaderRow: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 2,
+  },
+  newSongMetronomeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 4,
+    minHeight: 28,
+  },
+  newSongMetronomeBtnText: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.3,
   },
   bpmHeroCenter: {
     alignItems: 'center',

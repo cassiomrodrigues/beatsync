@@ -1,4 +1,4 @@
-import { BeatState, SoundType } from '../types';
+import { BeatState, MetronomeRhythmSnapshot, SoundType, Subdivision } from '../types';
 import * as Haptics from 'expo-haptics';
 import * as KeepAwake from 'expo-keep-awake';
 import { Platform } from 'react-native';
@@ -255,6 +255,19 @@ class AudioEngine {
 
   public getIsRunning(): boolean {
     return this.isRunning;
+  }
+
+  public getRhythmSnapshot(): MetronomeRhythmSnapshot {
+    const validSub: Subdivision =
+      this.subdivision === 2 || this.subdivision === 3 || this.subdivision === 4
+        ? this.subdivision
+        : 1;
+    return {
+      bpm: this.bpm,
+      timeSignature: `${this.numerator}/${this.denominator}`,
+      subdivision: validSub,
+      soundType: this.soundType,
+    };
   }
 
   private scheduler() {

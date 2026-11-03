@@ -146,13 +146,41 @@ function AppContent() {
   };
 
   // CRUD SONG HANDLERS
-  const handleSaveSong = async (song: Song) => {
+  const handleSaveSong = useCallback(async (song: Song) => {
     const updated = await StorageService.saveSong(song);
     setSongs(updated);
-    if (currentSong && currentSong.id === song.id) {
+    setCurrentSong((prev) => (prev && prev.id === song.id ? song : prev));
+  }, []);
+
+  const handleCreateSongFromMetronome = useCallback(
+    async (song: Song) => {
+      const updated = await StorageService.saveSong(song);
+      setSongs(updated);
       setCurrentSong(song);
-    }
-  };
+
+      if (!authSession?.userId) return;
+
+      try {
+        const uploaded = await CloudLibraryService.uploadSongToCloud(
+          song,
+          Boolean(song.isPublic)
+        );
+        if (uploaded.cloudId !== song.cloudId || uploaded.userId !== song.userId) {
+          const syncedSong: Song = {
+            ...song,
+            cloudId: uploaded.cloudId,
+            userId: uploaded.userId,
+          };
+          const syncedList = await StorageService.saveSong(syncedSong);
+          setSongs(syncedList);
+          setCurrentSong((prev) => (prev?.id === song.id ? syncedSong : prev));
+        }
+      } catch (e) {
+        console.warn('Erro ao sincronizar música criada no metrônomo:', e);
+      }
+    },
+    [authSession?.userId]
+  );
 
   const handleDeleteSong = async (songId: string) => {
     const targetSong = songs.find((s) => s.id === songId);
@@ -372,6 +400,7 @@ function AppContent() {
             currentSong={currentSong}
             onClearCurrentSong={handleClearCurrentSong}
             onOpenSongsTab={handleOpenSongsTab}
+            onSaveNewSong={handleCreateSongFromMetronome}
           />
         </View>
 

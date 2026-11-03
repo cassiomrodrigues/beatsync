@@ -25,7 +25,9 @@ export type AppIconName =
   | 'stop'
   | 'log-out-outline'
   | 'sunny'
-  | 'moon';
+  | 'moon'
+  | 'add'
+  | 'add-circle-outline';
 
 interface AppIconProps {
   name: AppIconName;
@@ -59,6 +61,8 @@ const FALLBACK_GLYPHS: Record<AppIconName, string> = {
   'log-out-outline': '↪',
   sunny: '☀',
   moon: '☾',
+  add: '+',
+  'add-circle-outline': '⊕',
 };
 
 function renderWebSvg(name: AppIconName, size: number, color: string): React.ReactNode {
@@ -445,6 +449,39 @@ function renderWebSvg(name: AppIconName, size: number, color: string): React.Rea
         React.createElement('path', {
           d: 'M20.2 14.8C19 15.3 17.7 15.5 16.3 15.5C11.1 15.5 6.9 11.3 6.9 6.1C6.9 4.7 7.2 3.4 7.7 2.2C4.4 3.5 2.1 6.8 2.1 10.6C2.1 15.8 6.3 20 11.5 20C15.3 20 18.6 17.7 20.2 14.8Z',
           fill: color,
+        })
+      );
+    }
+
+    case 'add': {
+      return React.createElement(
+        'svg',
+        commonProps,
+        React.createElement('path', {
+          d: 'M12 5V19M5 12H19',
+          stroke: color,
+          strokeWidth: 2.5,
+          strokeLinecap: 'round',
+        })
+      );
+    }
+
+    case 'add-circle-outline': {
+      return React.createElement(
+        'svg',
+        commonProps,
+        React.createElement('circle', {
+          cx: '12',
+          cy: '12',
+          r: '9',
+          stroke: color,
+          strokeWidth: 2,
+        }),
+        React.createElement('path', {
+          d: 'M12 8V16M8 12H16',
+          stroke: color,
+          strokeWidth: 2.2,
+          strokeLinecap: 'round',
         })
       );
     }
