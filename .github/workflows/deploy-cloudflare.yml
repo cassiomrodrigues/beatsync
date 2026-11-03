@@ -3,7 +3,7 @@ name: Deploy BeatSync to Cloudflare Pages
 on:
   push:
     branches:
-      - main
+      - '**'
   workflow_dispatch:
 
 concurrency:
@@ -42,5 +42,5 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID || '9c6e869109219131bf45980270f87dfc' }}
-          command: pages deploy dist --project-name=beatsync --branch=main
+          command: pages deploy dist --project-name=beatsync --branch=${{ github.ref_name }}
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
