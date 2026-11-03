@@ -34,7 +34,7 @@ const HORIZONTAL_LOGO = require('./assets/logo-horizontal.png');
 type TabType = 'metronome' | 'songs' | 'playlists' | 'live' | 'settings' | 'admin';
 
 function AppContent() {
-  const { currentTheme, syncSettingsFromCloud, resetThemeAndPreferences } = useTheme();
+  const { currentTheme, setIsPlaying, syncSettingsFromCloud, resetThemeAndPreferences } = useTheme();
   const [authSession, setAuthSession] = useState<AuthSession | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
 
@@ -70,6 +70,7 @@ function AppContent() {
       if (!user) {
         loadDataRequestIdRef.current++;
         audioEngine.destroyContext();
+        setIsPlaying(false);
         setAuthSession(null);
         setSongs([]);
         setPlaylists([]);
@@ -83,7 +84,7 @@ function AppContent() {
       isMounted = false;
       sub?.unsubscribe();
     };
-  }, []);
+  }, [setIsPlaying]);
 
   // Load local + cloud data in parallel on startup / login (avoids waterfalls)
   const loadData = useCallback(async () => {
@@ -155,6 +156,7 @@ function AppContent() {
 
     // 2. Force stop playback and explicitly destroy AudioContext & scheduled nodes
     audioEngine.destroyContext();
+    setIsPlaying(false);
 
     // 3. Reset all global application states in memory
     setAuthSession(null);
@@ -170,7 +172,7 @@ function AppContent() {
       StorageService.clearSessionCache(),
       resetThemeAndPreferences(),
     ]);
-  }, [resetThemeAndPreferences]);
+  }, [resetThemeAndPreferences, setIsPlaying]);
 
   const confirmLogout = () => {
     if (Platform.OS === 'web') {

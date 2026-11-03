@@ -28,10 +28,11 @@ export const LiveSetlistScreen: React.FC<LiveSetlistScreenProps> = ({
   onSelectPlaylist,
   onExitLiveMode,
 }) => {
-  const { currentTheme } = useTheme();
+  const { currentTheme, isPlaying, setIsPlaying } = useTheme();
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [isRunning, setIsRunning] = useState(false);
-  const [currentBeat, setCurrentBeat] = useState(0);
+  const [currentBeat, setCurrentBeat] = useState(() =>
+    audioEngine.getIsRunning() ? audioEngine.getCurrentBeatInMeasure() : 0
+  );
   const [isFlashActive, setIsFlashActive] = useState(false);
   const [jumpModalVisible, setJumpModalVisible] = useState(false);
   const [accentPattern, setAccentPattern] = useState<BeatState[]>(['accent', 'normal', 'normal', 'normal']);
@@ -49,7 +50,7 @@ export const LiveSetlistScreen: React.FC<LiveSetlistScreenProps> = ({
   const currentSong: Song | null = playlistSongs[currentIndex] || null;
   const nextSong: Song | null = playlistSongs[currentIndex + 1] || null;
 
-  // Whenever song or index changes, load parameters into audio engine
+  // Whenever song or index changes, load parameters into audio engine without interrupting continuous playback
   useEffect(() => {
     if (currentSong) {
       const parts = currentSong.timeSignature.split('/');
@@ -69,16 +70,17 @@ export const LiveSetlistScreen: React.FC<LiveSetlistScreenProps> = ({
         soundType: currentSong.soundType || 'woodblock',
         accentPattern: pattern,
       });
-
-      // If running, restart cleanly with new tempo
-      if (isRunning) {
-        audioEngine.stop();
-        audioEngine.start();
-      }
     }
   }, [currentIndex, currentSong]);
 
-  // Audio callback and cleanup on unmount / exit from Live Setlist
+  useEffect(() => {
+    if (!isPlaying) {
+      setCurrentBeat(0);
+      setIsFlashActive(false);
+    }
+  }, [isPlaying]);
+
+  // Audio callback registration (does not stop or suspend audio on unmount)
   useEffect(() => {
     const beatHandler = (beatIndex: number, isDownbeat: boolean) => {
       setCurrentBeat(beatIndex);
@@ -96,14 +98,13 @@ export const LiveSetlistScreen: React.FC<LiveSetlistScreenProps> = ({
         audioEngine.onBeatCallback = null;
       }
       if (flashTimeoutRef.current) clearTimeout(flashTimeoutRef.current);
-      audioEngine.suspendContext();
     };
   }, []);
 
   const togglePlay = () => {
-    if (isRunning) {
+    if (audioEngine.getIsRunning() || isPlaying) {
       audioEngine.stop();
-      setIsRunning(false);
+      setIsPlaying(false);
       setCurrentBeat(0);
     } else {
       if (currentSong) {
@@ -120,7 +121,7 @@ export const LiveSetlistScreen: React.FC<LiveSetlistScreenProps> = ({
         });
       }
       audioEngine.start();
-      setIsRunning(true);
+      setIsPlaying(true);
     }
   };
 
@@ -359,7 +360,7 @@ export const LiveSetlistScreen: React.FC<LiveSetlistScreenProps> = ({
           currentBeat={currentBeat}
           accentPattern={accentPattern}
           onToggleBeatState={() => {}}
-          isRunning={isRunning}
+          isRunning={isPlaying}
         />
 
         {/* Play/Stop Giant Button */}
@@ -369,30 +370,30 @@ export const LiveSetlistScreen: React.FC<LiveSetlistScreenProps> = ({
           style={[
             styles.playButton,
             {
-              backgroundColor: isRunning ? currentTheme.danger : currentTheme.accent,
-              shadowColor: isRunning ? currentTheme.danger : currentTheme.accent,
-              borderWidth: isPulsar && !isRunning ? 1 : 0,
-              borderColor: isPulsar && !isRunning ? '#B2FD0D' : 'transparent',
+              backgroundColor: isPlaying ? currentTheme.danger : currentTheme.accent,
+              shadowColor: isPlaying ? currentTheme.danger : currentTheme.accent,
+              borderWidth: isPulsar && !isPlaying ? 1 : 0,
+              borderColor: isPulsar && !isPlaying ? '#B2FD0D' : 'transparent',
             },
             Platform.OS === 'web'
               ? ({
                   backgroundImage:
-                    !isRunning && isPulsar
+                    !isPlaying && isPulsar
                       ? `linear-gradient(90deg, ${currentTheme.gradientStart} 0%, #FF7B00 32%, ${currentTheme.gradientEnd} 100%)`
                       : 'none',
                   boxShadow:
-                    !isRunning && isPulsar
+                    !isPlaying && isPulsar
                       ? '0 0 24px rgba(137, 242, 27, 0.55), 0 0 10px rgba(255, 94, 0, 0.4)'
                       : 'none',
                 } as any)
               : null,
           ]}
         >
-          <Text style={[styles.playIcon, { color: isRunning ? '#FFFFFF' : playBtnTextColor }]}>
-            {isRunning ? '■' : '▶'}
+          <Text style={[styles.playIcon, { color: isPlaying ? '#FFFFFF' : playBtnTextColor }]}>
+            {isPlaying ? '■' : '▶'}
           </Text>
-          <Text style={[styles.playText, { color: isRunning ? '#FFFFFF' : playBtnTextColor }]}>
-            {isRunning ? 'PARAR METRÔNOMO' : 'SOLTAR METRÔNOMO'}
+          <Text style={[styles.playText, { color: isPlaying ? '#FFFFFF' : playBtnTextColor }]}>
+            {isPlaying ? 'PARAR METRÔNOMO' : 'SOLTAR METRÔNOMO'}
           </Text>
         </TouchableOpacity>
 

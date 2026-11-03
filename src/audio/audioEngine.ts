@@ -1,7 +1,9 @@
 import { BeatState, MetronomeRhythmSnapshot, SoundType, Subdivision } from '../types';
 import * as Haptics from 'expo-haptics';
 import * as KeepAwake from 'expo-keep-awake';
-import { Platform } from 'react-native';
+import { AppState, AppStateStatus, Platform } from 'react-native';
+
+export type PlaybackStateListener = (isPlaying: boolean) => void;
 
 // Screen Wake Lock helper for browsers / PWA (keeps display awake on stage & rehearsal)
 let wakeLockSentinel: any = null;
@@ -42,14 +44,6 @@ async function releaseScreenWakeLock() {
   }
 }
 
-if (typeof document !== 'undefined') {
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && audioEngine.getIsRunning()) {
-      requestScreenWakeLock();
-    }
-  });
-}
-
 class AudioEngine {
   private audioCtx: AudioContext | null = null;
   private isRunning: boolean = false;
@@ -70,9 +64,11 @@ class AudioEngine {
   private timerId: ReturnType<typeof setInterval> | null = null;
   private pendingVisualTimers: Set<ReturnType<typeof setTimeout>> = new Set();
   private activeAudioNodes: Set<AudioScheduledSourceNode> = new Set();
+  private playbackListeners: Set<PlaybackStateListener> = new Set();
   private playbackGeneration: number = 0;
   private isUnlocked: boolean = false;
   private unlockListenersAttached: boolean = false;
+  private visibilityListenerAttached: boolean = false;
   private noiseBuffer: AudioBuffer | null = null;
   private lookaheadMs: number = 25; // How frequently to call scheduling (ms)
   private scheduleAheadTimeSec: number = 0.1; // How far ahead to schedule audio (sec)
@@ -83,6 +79,57 @@ class AudioEngine {
 
   constructor() {
     this.setupGlobalInteractionUnlock();
+    this.setupVisibilityProtection();
+  }
+
+  /**
+   * Subscribes a global state manager (Context/Store) to playback state (`isPlaying`) transitions.
+   * Immediately invokes the listener with the current playback status to prevent UI desynchronization.
+   */
+  public subscribePlaybackState(listener: PlaybackStateListener): () => void {
+    this.playbackListeners.add(listener);
+    try {
+      listener(this.isRunning);
+    } catch {
+      // Ignore subscriber initialization errors
+    }
+    return () => {
+      this.playbackListeners.delete(listener);
+    };
+  }
+
+  private notifyPlaybackState() {
+    const playing = this.isRunning;
+    this.playbackListeners.forEach((listener) => {
+      try {
+        listener(playing);
+      } catch {
+        // Ignore individual subscriber errors
+      }
+    });
+  }
+
+  /**
+   * Automatically forces metronome pause when the device is locked or the app/browser
+   * is minimized to background via the Page Visibility API (`document.hidden`) or React Native AppState.
+   */
+  private setupVisibilityProtection() {
+    if (typeof document !== 'undefined' && !this.visibilityListenerAttached) {
+      this.visibilityListenerAttached = true;
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden || document.visibilityState === 'hidden') {
+          this.pause();
+        }
+      });
+    }
+
+    if (Platform.OS !== 'web') {
+      AppState.addEventListener('change', (nextState: AppStateStatus) => {
+        if (nextState === 'background' || nextState === 'inactive') {
+          this.pause();
+        }
+      });
+    }
   }
 
   /**
@@ -234,6 +281,7 @@ class AudioEngine {
     this.isRunning = true;
     this.playbackGeneration++;
     const currentGen = this.playbackGeneration;
+    this.notifyPlaybackState();
 
     this.clearPendingVisualTimers();
     if (this.timerId) {
@@ -284,11 +332,19 @@ class AudioEngine {
 
     // Release screen wake lock when stopped
     releaseScreenWakeLock();
+    this.notifyPlaybackState();
   }
 
   /**
-   * Suspends the Web Audio API context and halts any active scheduling when navigating
-   * away from metronome / live stage screens, freeing audio hardware threads.
+   * Forces an immediate pause of the metronome (e.g. when device is locked or app is backgrounded)
+   * without destroying the underlying AudioContext.
+   */
+  public pause() {
+    this.stop();
+  }
+
+  /**
+   * Suspends the Web Audio API context and halts any active scheduling.
    */
   public suspendContext() {
     this.stop();
@@ -299,7 +355,7 @@ class AudioEngine {
 
   /**
    * Explicitly destroys the AudioContext instance, clears all scheduled timers/nodes,
-   * and resets internal engine parameters to initial defaults (used on logout / session teardown).
+   * and resets internal engine parameters to initial defaults (used exclusively on logout).
    */
   public destroyContext() {
     this.stop();
@@ -335,6 +391,22 @@ class AudioEngine {
 
   public getIsRunning(): boolean {
     return this.isRunning;
+  }
+
+  public getIsPlaying(): boolean {
+    return this.isRunning;
+  }
+
+  public getCurrentBeatInMeasure(): number {
+    return this.currentBeatInMeasure;
+  }
+
+  public getAccentPattern(): BeatState[] {
+    return [...this.accentPattern];
+  }
+
+  public getIsMuted(): boolean {
+    return this.isMuted;
   }
 
   public getRhythmSnapshot(): MetronomeRhythmSnapshot {

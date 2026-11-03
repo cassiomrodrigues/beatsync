@@ -50,13 +50,16 @@ const SOUND_OPTIONS: ReadonlyArray<{ id: SoundType; name: string }> = [
   { id: 'mechanical', name: 'Mecânico' },
 ];
 
-const INITIAL_TIME_SIGNATURE: TimeSignature = {
-  numerator: 4,
-  denominator: 4,
-  label: '4/4',
-};
-
-const INITIAL_ACCENT_PATTERN: BeatState[] = ['accent', 'normal', 'normal', 'normal'];
+function parseTimeSignatureLabel(label: string): TimeSignature {
+  const parts = label.split('/');
+  const num = parseInt(parts[0], 10) || 4;
+  const den = parseInt(parts[1], 10) || 4;
+  return {
+    numerator: num,
+    denominator: den,
+    label: `${num}/${den}`,
+  };
+}
 
 function getTempoName(bpm: number): string {
   for (let i = 0; i < TEMPO_MARKINGS.length; i++) {
@@ -125,7 +128,9 @@ interface LiveBeatSectionProps {
 
 const LiveBeatSection: React.FC<LiveBeatSectionProps> = React.memo(
   ({ isActive, numerator, accentPattern, onToggleBeatState, isRunning, flashEnabled, theme }) => {
-    const [currentBeat, setCurrentBeat] = useState(0);
+    const [currentBeat, setCurrentBeat] = useState(() =>
+      audioEngine.getIsRunning() ? audioEngine.getCurrentBeatInMeasure() : 0
+    );
     const [isFlashActive, setIsFlashActive] = useState(false);
     const flashTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -133,11 +138,17 @@ const LiveBeatSection: React.FC<LiveBeatSectionProps> = React.memo(
       if (!isRunning) {
         setCurrentBeat(0);
         setIsFlashActive(false);
+      } else if (isActive) {
+        setCurrentBeat(audioEngine.getCurrentBeatInMeasure());
       }
-    }, [isRunning]);
+    }, [isRunning, isActive]);
 
     useEffect(() => {
       if (!isActive) return;
+
+      if (audioEngine.getIsRunning()) {
+        setCurrentBeat(audioEngine.getCurrentBeatInMeasure());
+      }
 
       const beatHandler = (beatIndex: number, isDownbeat: boolean) => {
         setCurrentBeat(beatIndex);
@@ -502,38 +513,50 @@ export const MetronomeScreen: React.FC<MetronomeScreenProps> = ({
     currentTheme,
     defaultSoundType,
     flashEnabled: cloudFlashEnabled,
+    isPlaying,
+    setIsPlaying,
+    syncPlaybackState,
     setDefaultSoundType,
     setFlashEnabledPref,
   } = useTheme();
-  const [bpm, setBpm] = useState(120);
-  const [timeSignature, setTimeSignature] = useState<TimeSignature>(INITIAL_TIME_SIGNATURE);
-  const [subdivision, setSubdivision] = useState<Subdivision>(1);
-  const [soundType, setSoundType] = useState<SoundType>(defaultSoundType);
+
+  const [bpm, setBpm] = useState(() => audioEngine.getRhythmSnapshot().bpm || 120);
+  const [timeSignature, setTimeSignature] = useState<TimeSignature>(() =>
+    parseTimeSignatureLabel(audioEngine.getRhythmSnapshot().timeSignature || '4/4')
+  );
+  const [subdivision, setSubdivision] = useState<Subdivision>(
+    () => audioEngine.getRhythmSnapshot().subdivision || 1
+  );
+  const [soundType, setSoundType] = useState<SoundType>(
+    () => audioEngine.getRhythmSnapshot().soundType || defaultSoundType
+  );
   const [volume] = useState(0.85);
-  const [isMuted, setIsMuted] = useState(false);
-  const [isRunning, setIsRunning] = useState(false);
-  const [accentPattern, setAccentPattern] = useState<BeatState[]>(INITIAL_ACCENT_PATTERN);
+  const [isMuted, setIsMuted] = useState(() => audioEngine.getIsMuted());
+  const [accentPattern, setAccentPattern] = useState<BeatState[]>(() =>
+    audioEngine.getAccentPattern()
+  );
   const [flashEnabled, setFlashEnabled] = useState(cloudFlashEnabled);
   const [tsModalVisible, setTsModalVisible] = useState(false);
   const [isNewSongModalVisible, setIsNewSongModalVisible] = useState(false);
 
-  // Stop scheduling and suspend AudioContext when navigating away from MetronomeScreen or unmounting
+  // Immediately synchronize global playback state (`isPlaying`) and live engine parameters
+  // whenever the user returns to the Metronome tab, without interrupting continuous audio.
   useEffect(() => {
-    if (!isActive) {
-      setIsRunning(false);
-      audioEngine.suspendContext();
+    if (isActive) {
+      syncPlaybackState();
+      const snapshot = audioEngine.getRhythmSnapshot();
+      setBpm(snapshot.bpm);
+      setTimeSignature(parseTimeSignatureLabel(snapshot.timeSignature));
+      setSubdivision(snapshot.subdivision);
+      setSoundType(snapshot.soundType);
+      setIsMuted(audioEngine.getIsMuted());
+      setAccentPattern(audioEngine.getAccentPattern());
     }
-  }, [isActive]);
-
-  useEffect(() => {
-    return () => {
-      audioEngine.suspendContext();
-    };
-  }, []);
+  }, [isActive, syncPlaybackState]);
 
   // Sync default sound type and flash preference when user_settings load from Supabase
   useEffect(() => {
-    if (!currentSong) {
+    if (!currentSong && !audioEngine.getIsRunning()) {
       setSoundType(defaultSoundType);
       audioEngine.updateParameters({ soundType: defaultSoundType });
     }
@@ -707,27 +730,25 @@ export const MetronomeScreen: React.FC<MetronomeScreenProps> = ({
   }, []);
 
   const togglePlay = useCallback(() => {
-    setIsRunning((prevRunning) => {
-      if (prevRunning) {
-        audioEngine.stop();
-        return false;
-      } else {
-        // Ensure latest state parameters are synced right before starting
-        audioEngine.updateParameters({
-          bpm,
-          numerator: timeSignature.numerator,
-          denominator: timeSignature.denominator,
-          subdivision,
-          soundType,
-          volume,
-          isMuted,
-          accentPattern,
-        });
-        audioEngine.start();
-        return true;
-      }
-    });
-  }, [bpm, timeSignature, subdivision, soundType, volume, isMuted, accentPattern]);
+    if (audioEngine.getIsRunning() || isPlaying) {
+      audioEngine.stop();
+      setIsPlaying(false);
+    } else {
+      // Ensure latest state parameters are synced right before starting
+      audioEngine.updateParameters({
+        bpm,
+        numerator: timeSignature.numerator,
+        denominator: timeSignature.denominator,
+        subdivision,
+        soundType,
+        volume,
+        isMuted,
+        accentPattern,
+      });
+      audioEngine.start();
+      setIsPlaying(true);
+    }
+  }, [bpm, timeSignature, subdivision, soundType, volume, isMuted, accentPattern, isPlaying, setIsPlaying]);
 
   const isPulsar = Boolean(currentTheme.hasBrandGradient);
   const playBtnTextColor = currentTheme.isDark ? '#000000' : '#FFFFFF';
@@ -866,7 +887,7 @@ export const MetronomeScreen: React.FC<MetronomeScreenProps> = ({
               />
             </TouchableOpacity>
 
-            <PracticeTimerBadge isRunning={isRunning} theme={currentTheme} />
+            <PracticeTimerBadge isRunning={isPlaying} theme={currentTheme} />
           </View>
         </View>
 
@@ -950,7 +971,7 @@ export const MetronomeScreen: React.FC<MetronomeScreenProps> = ({
           numerator={timeSignature.numerator}
           accentPattern={accentPattern}
           onToggleBeatState={handleToggleBeatState}
-          isRunning={isRunning}
+          isRunning={isPlaying}
           flashEnabled={flashEnabled}
           theme={currentTheme}
         />
@@ -960,26 +981,26 @@ export const MetronomeScreen: React.FC<MetronomeScreenProps> = ({
           activeOpacity={0.85}
           onPress={togglePlay}
           accessibilityRole="button"
-          accessibilityState={{ busy: isRunning }}
-          accessibilityLabel={isRunning ? 'Parar Metrônomo' : 'Iniciar Metrônomo'}
+          accessibilityState={{ busy: isPlaying }}
+          accessibilityLabel={isPlaying ? 'Parar Metrônomo' : 'Iniciar Metrônomo'}
           style={[
             styles.playButton,
             {
-              backgroundColor: isRunning ? currentTheme.danger : currentTheme.accent,
-              shadowColor: isRunning ? currentTheme.danger : currentTheme.accent,
-              borderWidth: isPulsar && !isRunning ? 1 : 0,
-              borderColor: isPulsar && !isRunning ? '#B2FD0D' : 'transparent',
+              backgroundColor: isPlaying ? currentTheme.danger : currentTheme.accent,
+              shadowColor: isPlaying ? currentTheme.danger : currentTheme.accent,
+              borderWidth: isPulsar && !isPlaying ? 1 : 0,
+              borderColor: isPulsar && !isPlaying ? '#B2FD0D' : 'transparent',
             },
             Platform.OS === 'web'
               ? ({
                   backgroundImage:
-                    !isRunning && isPulsar
+                    !isPlaying && isPulsar
                       ? `linear-gradient(90deg, ${currentTheme.gradientStart} 0%, #FF7B00 32%, ${currentTheme.gradientEnd} 100%)`
                       : 'none',
                   boxShadow:
-                    !isRunning && isPulsar
+                    !isPlaying && isPulsar
                       ? '0 0 22px rgba(137, 242, 27, 0.5), 0 0 10px rgba(255, 94, 0, 0.4)'
-                      : isRunning && isPulsar
+                      : isPlaying && isPulsar
                       ? '0 0 18px rgba(255, 61, 0, 0.55)'
                       : 'none',
                 } as any)
@@ -987,17 +1008,17 @@ export const MetronomeScreen: React.FC<MetronomeScreenProps> = ({
           ]}
         >
           <AppIcon
-            name={isRunning ? 'stop' : 'play'}
+            name={isPlaying ? 'stop' : 'play'}
             size={20}
-            color={isRunning ? '#FFFFFF' : playBtnTextColor}
+            color={isPlaying ? '#FFFFFF' : playBtnTextColor}
           />
           <Text
             style={[
               styles.playText,
-              { color: isRunning ? '#FFFFFF' : playBtnTextColor },
+              { color: isPlaying ? '#FFFFFF' : playBtnTextColor },
             ]}
           >
-            {isRunning ? 'PARAR METRÔNOMO' : 'INICIAR METRÔNOMO'}
+            {isPlaying ? 'PARAR METRÔNOMO' : 'INICIAR METRÔNOMO'}
           </Text>
         </TouchableOpacity>
       </View>

@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SoundType } from '../types';
 import { CloudLibraryService } from '../supabase/cloudLibrary';
 import { AuthService } from '../supabase/supabaseClient';
+import { audioEngine } from '../audio/audioEngine';
 
 export type ThemeId =
   | 'oled_zero'
@@ -246,6 +247,9 @@ interface ThemeContextType {
   defaultSoundType: SoundType;
   flashEnabled: boolean;
   hapticsEnabled: boolean;
+  isPlaying: boolean;
+  setIsPlaying: (playing: boolean) => void;
+  syncPlaybackState: () => void;
   setThemeId: (id: ThemeId) => Promise<void>;
   toggleLightTheme: () => Promise<void>;
   setDefaultSoundType: (sound: SoundType) => Promise<void>;
@@ -262,6 +266,9 @@ const ThemeContext = createContext<ThemeContextType>({
   defaultSoundType: 'woodblock',
   flashEnabled: true,
   hapticsEnabled: true,
+  isPlaying: false,
+  setIsPlaying: () => {},
+  syncPlaybackState: () => {},
   setThemeId: async () => {},
   toggleLightTheme: async () => {},
   setDefaultSoundType: async () => {},
@@ -278,6 +285,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [defaultSoundType, setDefaultSoundTypeState] = useState<SoundType>('woodblock');
   const [flashEnabled, setFlashEnabledState] = useState<boolean>(true);
   const [hapticsEnabled, setHapticsEnabledState] = useState<boolean>(true);
+  const [isPlaying, setIsPlayingState] = useState<boolean>(() => audioEngine.getIsRunning());
   const activeUserIdRef = useRef<string | undefined>(undefined);
   const isMountedRef = useRef<boolean>(true);
   const syncRequestIdRef = useRef<number>(0);
@@ -289,10 +297,48 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     };
   }, []);
 
+  // Subscribe global `isPlaying` state to AudioEngine lifecycle transitions
+  useEffect(() => {
+    const unsubscribe = audioEngine.subscribePlaybackState((playing) => {
+      if (isMountedRef.current) {
+        setIsPlayingState(playing);
+      }
+    });
+    return unsubscribe;
+  }, []);
+
+  // Page Visibility API: Automatically pause metronome if device is locked or app is minimized
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        audioEngine.pause();
+        if (isMountedRef.current) {
+          setIsPlayingState(false);
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
+
+  const setIsPlaying = useCallback((playing: boolean) => {
+    setIsPlayingState(playing);
+  }, []);
+
+  const syncPlaybackState = useCallback(() => {
+    setIsPlayingState(audioEngine.getIsRunning());
+  }, []);
+
   const resetThemeAndPreferences = useCallback(async () => {
     syncRequestIdRef.current++;
     activeUserIdRef.current = undefined;
     if (isMountedRef.current) {
+      setIsPlayingState(false);
       setThemeIdState('oled_zero');
       setDefaultSoundTypeState('woodblock');
       setFlashEnabledState(true);
@@ -492,6 +538,9 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       defaultSoundType,
       flashEnabled,
       hapticsEnabled,
+      isPlaying,
+      setIsPlaying,
+      syncPlaybackState,
       setThemeId,
       toggleLightTheme,
       setDefaultSoundType,
@@ -506,6 +555,9 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       defaultSoundType,
       flashEnabled,
       hapticsEnabled,
+      isPlaying,
+      setIsPlaying,
+      syncPlaybackState,
       setThemeId,
       toggleLightTheme,
       setDefaultSoundType,
